@@ -338,7 +338,7 @@ nav.tabs button{font-size:.75rem}
         <textarea id="io" rows="3" hidden style="font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px;margin-top:6px"></textarea>
       </div>
       <p class="note" id="store-note">Az előrehaladásod mentése…</p>
-      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 14</p>
+      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 15</p>
     </section>
   </main>
 
@@ -610,6 +610,7 @@ Rules for your spoken reply:
 - Always end with a question or prompt so the learner keeps talking.
 - Do not correct mistakes inside the reply; corrections go in the feedback part.
 - The learner may write in Hungarian. If it is a question to you as a teacher (for example what a word means, how to say something in English, or a grammar question), answer it in Hungarian in "answer_hu" (max 3 short sentences, with English examples), and in REPLY continue the conversation in English. If it is an ordinary conversation message written in Hungarian, reply in simple English and put the English version in "correction".
+- Translation requests: if the learner asks you (in English or Hungarian, e.g. "translate it into Hungarian", "what does that mean in Hungarian?", "fordítsd le magyarra", "mit jelent ez?") to translate your last message or a given text into Hungarian, put the full, natural Hungarian translation in "answer_hu", and make REPLY only a very short English lead-in such as "Sure, here it is in Hungarian." (no question). Do not put a correction for such a request unless it had a real mistake.
 
 Output format, exactly:
 REPLY: <your English reply>
@@ -722,8 +723,10 @@ async function ask(){
     markDay();
     save();
     renderChat();
-    if(handsOn()){ (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=>{ if(handsOn() && !$("v-chat").hidden) listen(true); }); }
-    else if(S.settings.autoread && !earlyP) say(reply);
+    const huAns = fb && fb.answer_hu ? String(fb.answer_hu) : "";
+    const thenHu = () => huAns ? speakP(huAns, "hu-HU", 1) : null; // read Emma's Hungarian answer / translation aloud too
+    if(handsOn()){ const g = speakGen; (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=> g===speakGen ? thenHu() : null).then(()=>{ if(handsOn() && !$("v-chat").hidden) listen(true); }); }
+    else if(S.settings.autoread){ const g = speakGen; if(!earlyP){ stopSpeaking(); } const g2 = speakGen; (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=>{ if(speakGen===g2 || speakGen===g) thenHu(); }); }
   }catch(e){
     bubble.remove();
     if(hf.on) stopHandsFree(false);
