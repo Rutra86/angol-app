@@ -292,6 +292,12 @@ nav.tabs button{font-size:.75rem}
         </select>
       </div>
       <div class="field">
+        <label for="voice">Emma hangja</label>
+        <select id="voice"></select>
+        <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
+        <span class="muted" style="font-size:.88rem">Az OpenAI-hangok élethűbbek (kevés díjjal járnak), a böngésző hangjai ingyenesek.</span>
+      </div>
+      <div class="field">
         <label for="rate">Felolvasás sebessége: <span id="rate-v">0.9</span>×</label>
         <input type="range" id="rate" min="0.6" max="1.2" step="0.05" value="0.9">
       </div>
@@ -760,18 +766,69 @@ async function translate(idx){
 /* ---------- speech ---------- */
 let voices = [];
 function loadVoices(){ try{ voices = speechSynthesis.getVoices(); }catch(e){} }
-if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
-function say(text){
-  if(!("speechSynthesis" in window) || !text) return;
-  try{
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = S.settings.accent; u.rate = S.settings.rate;
-    const v = voices.find(v=>v.lang===S.settings.accent) || voices.find(v=>v.lang && v.lang.startsWith("en"));
-    if(v) u.voice = v;
-    speechSynthesis.speak(u);
-  }catch(e){}
+if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = ()=>{ loadVoices(); renderVoices(); }; }
+const OAI_VOICES = [["nova","Nova – fiatal, élénk"],["shimmer","Shimmer – fiatal, lágy"],["coral","Coral – barátságos, meleg"],["sage","Sage – nyugodt"]];
+const YOUNG_PITCH = 1.12;
+let curAudio = null; const ttsCache = new Map();
+function voiceChoice(){ return S.settings.voice || (oaiKey() ? "openai:nova" : "browser:"); }
+function stopSpeaking(){ try{ speechSynthesis.cancel(); }catch(e){} try{ if(curAudio){ curAudio.pause(); curAudio = null; } }catch(e){} }
+function renderVoices(){
+  const sel = $("voice"); if(!sel) return;
+  const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en"));
+  let html = "";
+  if(oaiKey()) html += `<optgroup label="OpenAI (élethű)">${OAI_VOICES.map(([id,l])=>`<option value="openai:${id}">${l}</option>`).join("")}</optgroup>`;
+  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus (kicsit fiatalított)</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
+  sel.innerHTML = html; sel.value = voiceChoice();
+  if(!sel.value) sel.value = "browser:";
 }
+function pickTtsModel(){
+  const ids = (oaiAllIds||[]).filter(id=>/tts/.test(id) && !/realtime|audio-preview/.test(id));
+  return ids.find(id=>/mini-tts/.test(id)) || ids.find(id=>!/^tts-1/.test(id)) || ids[0] || "tts-1";
+}
+async function oaiTTS(text, voice, rate){
+  const key = oaiKey(); const model = pickTtsModel();
+  const ck = model+"|"+voice+"|"+rate+"|"+text;
+  let url = ttsCache.get(ck);
+  if(!url){
+    const body = {model, voice, input:text, speed: Math.max(0.25, Math.min(4, rate||1))};
+    if(!/^tts-1/.test(model)) body.instructions = "Voice: a cheerful, friendly young woman in her mid-twenties, a language tutor. Natural, warm and clear.";
+    let r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)});
+    if(!r.ok && r.status===400 && body.instructions){ delete body.instructions; r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)}); }
+    if(!r.ok) throw new Error("tts "+r.status);
+    url = URL.createObjectURL(await r.blob());
+    ttsCache.set(ck, url); if(ttsCache.size > 40){ const k = ttsCache.keys().next().value; URL.revokeObjectURL(ttsCache.get(k)); ttsCache.delete(k); }
+  }
+  await new Promise(res=>{
+    const a = new Audio(url); curAudio = a;
+    a.onended = a.onerror = a.onpause = () => { if(curAudio===a) curAudio = null; res(); };
+    a.play().catch(()=>res());
+  });
+}
+function browserSpeak(text, lang, rate, young){
+  return new Promise(res=>{
+    if(!("speechSynthesis" in window) || !text) return res();
+    try{
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang; u.rate = rate;
+      const vc = voiceChoice(); const named = vc.startsWith("browser:") && vc.slice(8) ? voices.find(v=>v.name===vc.slice(8)) : null;
+      const v = (young && named) || pickVoice(lang); if(v) u.voice = v;
+      if(young) u.pitch = YOUNG_PITCH;
+      const done = ()=>{ clearTimeout(t); res(); };
+      const t = setTimeout(done, 4000 + text.length*150); // safety if onend never fires
+      u.onend = done; u.onerror = done;
+      speechSynthesis.speak(u);
+    }catch(e){ res(); }
+  });
+}
+async function speakEN(text, rate){
+  if(!text) return;
+  const vc = voiceChoice();
+  if(vc.startsWith("openai:") && oaiKey()){
+    try{ await oaiTTS(text, vc.slice(7), rate); return; }catch(e){ /* fall back to the browser voice */ }
+  }
+  await browserSpeak(text, S.settings.accent, rate, true);
+}
+function say(text){ if(!text) return; stopSpeaking(); speakEN(text, S.settings.rate); }
 
 let rec = null, recOn = false;
 function micHint(msg){
@@ -842,7 +899,7 @@ function startListening(auto){
 }
 function toggleMic(){
   if(recOn){ if(mrec) stopRecording(); else stopListening(); return; }
-  try{ speechSynthesis.cancel(); }catch(e){}
+  stopSpeaking();
   listen(false);
 }
 function oaiKey(){ try{ return localStorage.getItem(OAI_KEY_LS)||""; }catch(e){ return ""; } }
@@ -978,7 +1035,7 @@ function renderStreak(){
 function renderSettings(){
   const s=S.settings;
   $("level").value=s.level; $("accent").value=s.accent; $("rate").value=s.rate; $("rate-v").textContent=(+s.rate).toFixed(2);
-  $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); $("stt").value=sttEngine(); renderKeyState();
+  $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); $("stt").value=sttEngine(); renderVoices(); renderKeyState();
 }
 ["level","accent"].forEach(id=>$(id).onchange=e=>{ S.settings[id]=e.target.value; save(); });
 $("rate").oninput=e=>{ S.settings.rate=+e.target.value; $("rate-v").textContent=(+e.target.value).toFixed(2); save(); };
@@ -986,6 +1043,8 @@ $("rate").onchange=()=>say("This is how fast I will speak.");
 $("autoread").onchange=e=>{ S.settings.autoread=e.target.checked; save(); };
 $("voicemode").onchange=e=>{ S.settings.voicemode=e.target.checked; save(); };
 $("stt").onchange=e=>{ S.settings.stt=e.target.value; save(); };
+$("voice").onchange=e=>{ S.settings.voice=e.target.value; save(); say("Hi! I'm Emma. Shall we practise some English today?"); };
+$("voice-test").onclick=()=>say("Hi! I'm Emma. Shall we practise some English today?");
 $("model").onchange=e=>{ S.settings.model=e.target.value; save(); };
 $("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(!v) return;
   // pick the provider from the key itself
@@ -993,7 +1052,7 @@ $("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(
   else if(/^sk-/.test(v)) S.settings.provider = "openai";
   else { $("apikey-state").textContent = "Ez nem API-kulcsnak tűnik. Az OpenAI-kulcs sk- kezdetű, a Claude-kulcs sk-ant- kezdetű."; return; }
   save(); $("provider").value = S.settings.provider;
-  try{ localStorage.setItem(keyName(), v); }catch(e){} $("apikey").value=""; samplePromise=null; oaiModels=null; $("stt").value=sttEngine(); renderKeyState(); };
+  try{ localStorage.setItem(keyName(), v); }catch(e){} $("apikey").value=""; samplePromise=null; oaiModels=null; $("stt").value=sttEngine(); renderVoices(); renderKeyState(); };
 $("apikey-del").onclick=()=>{ try{ localStorage.removeItem(keyName()); }catch(e){} samplePromise=null; oaiModels=null; renderKeyState(); };
 $("provider").onchange=e=>{ S.settings.provider=e.target.value; save(); samplePromise=null; renderKeyState(); };
 $("oai-model").onchange=e=>{ if(e.target.value){ S.settings.oaiModel=e.target.value; save(); } };
@@ -1148,7 +1207,7 @@ function renderRead(){
     ${r.glossary && r.glossary.length ? `<h2 style="margin-top:20px">Szószedet</h2><ul class="vlist">${r.glossary.map(g=>`<li><span class="w">${esc(g.en)}</span><span class="m">${esc(g.hu)}</span></li>`).join("")}</ul>
       <div class="row" style="margin-top:10px"><button class="btn" id="read-add">${r.added ? "Hozzáadva a szókártyákhoz ✓" : "Szavak hozzáadása a szókártyákhoz"}</button></div>` : ""}`;
   $("read-say").onclick = ()=>say(r.text);
-  $("read-stop").onclick = ()=>{ try{ speechSynthesis.cancel(); }catch(e){} };
+  $("read-stop").onclick = ()=>{ stopSpeaking(); };
   const add = $("read-add"); if(add) add.onclick = ()=>{ if(r.added) return; addWords(r.glossary); r.added = true; save(); renderRead(); };
 }
 $("read-out").addEventListener("click", e=>{
@@ -1217,6 +1276,7 @@ function pickVoice(lang){
   return voices.find(v=>v.lang===lang) || voices.find(v=>v.lang && v.lang.replace("_","-").toLowerCase().startsWith(lang.slice(0,2).toLowerCase()));
 }
 function speakP(text, lang, rate){
+  if(/^en/i.test(lang)) return speakEN(text, rate);
   return new Promise(res=>{
     if(!("speechSynthesis" in window) || !text) return res();
     try{
@@ -1255,14 +1315,14 @@ async function startCar(){
 }
 function stopCar(){
   car.playing = false; car.token++; car.stage="";
-  try{ speechSynthesis.cancel(); }catch(e){}
+  stopSpeaking();
   try{ car.wake && car.wake.release(); }catch(e){} car.wake=null;
   renderCar();
 }
 function carJump(d){
   const n = carItems().length; if(!n) return;
   car.idx = (car.idx + d + n) % n;
-  if(car.playing){ car.token++; try{ speechSynthesis.cancel(); }catch(e){} carLoop(); } else renderCar();
+  if(car.playing){ car.token++; stopSpeaking(); carLoop(); } else renderCar();
 }
 document.addEventListener("visibilitychange", async ()=>{
   if(document.visibilityState==="visible" && car.playing && !car.wake){ try{ car.wake = await navigator.wakeLock.request("screen"); }catch(e){} }
@@ -1271,7 +1331,7 @@ document.addEventListener("visibilitychange", async ()=>{
 $("car-play").onclick = ()=> car.playing ? stopCar() : startCar();
 $("car-prev").onclick = ()=>carJump(-1);
 $("car-next").onclick = ()=>carJump(1);
-$("car-src").onchange = e=>{ S.settings.carSrc = e.target.value; car.idx=0; save(); if(car.playing){ car.token++; try{speechSynthesis.cancel();}catch(_){} carLoop(); } else renderCar(); };
+$("car-src").onchange = e=>{ S.settings.carSrc = e.target.value; car.idx=0; save(); if(car.playing){ car.token++; stopSpeaking(); carLoop(); } else renderCar(); };
 $("car-pause").onchange = e=>{ S.settings.carPause = +e.target.value; save(); };
 $("car-gen").onclick = async e=>{
   const btn = e.currentTarget; const sample = await getSample();
