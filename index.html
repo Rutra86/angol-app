@@ -338,7 +338,7 @@ nav.tabs button{font-size:.75rem}
         <textarea id="io" rows="3" hidden style="font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px;margin-top:6px"></textarea>
       </div>
       <p class="note" id="store-note">Az előrehaladásod mentése…</p>
-      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 13</p>
+      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 14</p>
     </section>
   </main>
 
@@ -1370,7 +1370,7 @@ function pickVoice(lang){
     const L = lang.toLowerCase().replace("_","-");
     const en = voices.filter(v=>v.lang && v.lang.toLowerCase().replace("_","-")===L && isFemale(v));
     const nice = /natural|neural|online|enhanced|premium|siri/i, fem = /female|samantha|serena|kate|libby|sonia|aria|jenny|emma|ava|zira|hazel|susan|karen|moira|tessa|fiona|google uk english female|google us english/i;
-    const v = en.find(v=>nice.test(v.name) && fem.test(v.name)) || en.find(v=>fem.test(v.name)) || en.find(v=>nice.test(v.name));
+    const v = en.find(v=>nice.test(v.name) && fem.test(v.name)) || en.find(v=>fem.test(v.name)) || en.find(v=>nice.test(v.name)) || en[0]; // Android names voices only by locale (en_GB)
     if(v) return v;
   }
   return voices.find(v=>v.lang===lang) || voices.find(v=>v.lang && v.lang.replace("_","-").toLowerCase().startsWith(lang.slice(0,2).toLowerCase()));
