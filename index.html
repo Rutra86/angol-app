@@ -303,7 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
-        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 8</span>
+        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 9</span>
         <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
       </div>
       <div class="field">
@@ -789,7 +789,8 @@ function voiceChoice(){
 let speakGen = 0;
 function stopSpeaking(){ speakGen++; try{ speechSynthesis.cancel(); }catch(e){} try{ if(curAudio){ curAudio.pause(); curAudio = null; } }catch(e){} }
 const MALE_RE = /\bmale\b|david|mark|george|ryan|guy\b|thomas|christopher|eric|roger|steffan|brian|andrew|davis|tony|jason|alfie|elliot|ethan|noah|oliver|daniel|fred\b|alex\b|aaron|arthur|rishi|gordon|\blee\b|liam|connor|mitchell|william|prabhat|james|richard|ralph|albert|bruce|junior|kyle|reed|rocko|grandpa|nathan|evan|tom\b|luke|ken\b|duncan|sean|neil|wayne|darren|ravi|tim\b/i;
-const isFemale = v => !MALE_RE.test(v.name.replace(/female/i,""));
+const HIDDEN_VOICES = /\b(abeo|ana)\b/i; // removed at the user's request
+const isFemale = v => !MALE_RE.test(v.name.replace(/female/i,"")) && !HIDDEN_VOICES.test(v.name);
 function renderVoices(){
   const sel = $("voice"); if(!sel) return;
   const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en") && isFemale(v));
