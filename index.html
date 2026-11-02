@@ -338,7 +338,7 @@ nav.tabs button{font-size:.75rem}
         <textarea id="io" rows="3" hidden style="font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px;margin-top:6px"></textarea>
       </div>
       <p class="note" id="store-note">Az előrehaladásod mentése…</p>
-      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 12</p>
+      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 13</p>
     </section>
   </main>
 
@@ -485,12 +485,15 @@ function fillOai(){
   sel.innerHTML = oaiModels.map(id=>`<option value="${esc(id)}">${esc(id)}</option>`).join("");
   sel.value = cur;
 }
+let oaiNoEffort = false;
 async function oaiCall(key, model, messages, onText, stream){
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const go = extra => fetch("https://api.openai.com/v1/chat/completions", {
     method:"POST",
     headers:{"Content-Type":"application/json", "Authorization":"Bearer "+key},
-    body: JSON.stringify({model, messages, stream, max_completion_tokens:4000})
+    body: JSON.stringify(Object.assign({model, messages, stream, max_completion_tokens:4000}, extra))
   });
+  let res = await go(oaiNoEffort ? {} : {reasoning_effort:"low"});
+  if(!oaiNoEffort && res.status===400){ oaiNoEffort = true; res = await go({}); }
   if(!res.ok){ let m=""; try{ m=(await res.json()).error.message; }catch(_){} throw oaiError(res.status, m); }
   if(!stream){ const j = await res.json(); const t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || ""; if(onText && t) onText({text:t}); return t; }
   const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", text = "";
@@ -697,10 +700,14 @@ async function ask(){
   const bubble = document.createElement("div"); bubble.className="msg tutor typing"; bubble.textContent="Emma gépel…";
   box.appendChild(bubble); scrollDown();
   const asText = v => typeof v==="string" ? v : (v && typeof v.text==="string") ? v.text : "";
+  let earlyP = null;
   try{
     const res = await sample(buildInput(c.map(m=>({role:m.role, content:String(m.content||""), spoken:!!m.spoken}))), {
       cache:false,
-      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r){ bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); } }catch(_){} }
+      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r){ bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); }
+        // the spoken reply is complete once the feedback marker arrives: start talking while the corrections are still streaming
+        if(!earlyP && r && t.indexOf("@@@")>=0 && (handsOn() || S.settings.autoread)){ stopSpeaking(); earlyP = speakP(r, S.settings.accent, S.settings.rate); }
+      }catch(_){} }
     });
     const text = asText(res);
     const {reply, fb} = splitOut(text);
@@ -715,8 +722,8 @@ async function ask(){
     markDay();
     save();
     renderChat();
-    if(handsOn()){ speakP(reply, S.settings.accent, S.settings.rate).then(()=>{ if(handsOn() && !$("v-chat").hidden) listen(true); }); }
-    else if(S.settings.autoread) say(reply);
+    if(handsOn()){ (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=>{ if(handsOn() && !$("v-chat").hidden) listen(true); }); }
+    else if(S.settings.autoread && !earlyP) say(reply);
   }catch(e){
     bubble.remove();
     if(hf.on) stopHandsFree(false);
@@ -872,7 +879,7 @@ function micHint(msg){
 // Listening keeps going across short pauses: the browser ends each recognition
 // session after a pause, so we restart it and keep what was already recognised.
 // It stops when you tap the mic again, or after a longer silence.
-const SILENCE_MS = 4000, FIRST_WORD_MS = 10000;
+const SILENCE_MS = 4000, FIRST_WORD_MS = 10000, OAI_SILENCE_MS = 2200;
 let recWanted = false, recTimer = null;
 function stopListening(){ recWanted = false; clearTimeout(recTimer); try{ rec && rec.stop(); }catch(e){} }
 function startListening(auto){
@@ -970,7 +977,7 @@ function listen(auto){
 /* ---------- OpenAI speech-to-text: record, detect silence, transcribe ---------- */
 let mrec = null, mstream = null, mctx = null;
 function stopRecording(){ try{ mrec && mrec.state!=="inactive" && mrec.stop(); }catch(e){} }
-let sttModelOk = null;
+let sttModelOk = (()=>{ try{ return localStorage.getItem("bsz-stt-model"); }catch(e){ return null; } })();
 function pickTranscribeModel(){
   const ids = (oaiAllIds || []).filter(id=>!/realtime|diariz|preview/.test(id));
   return ids.find(id=>/transcribe$/.test(id) && !/mini/.test(id)) || ids.find(id=>/transcribe/.test(id) && !/diariz/.test(id)) || "whisper-1";
@@ -994,7 +1001,7 @@ async function recordOpenAI(auto){
       an.getFloatTimeDomainData(buf); let sum=0; for(const v of buf) sum += v*v; const rms = Math.sqrt(sum/buf.length);
       if(rms > 0.02){ spoke = true; lastLoud = Date.now(); }
       const now = Date.now();
-      if((spoke && now-lastLoud > SILENCE_MS) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 90000) stopRecording();
+      if((spoke && now-lastLoud > OAI_SILENCE_MS) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 90000) stopRecording();
       else requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -1018,7 +1025,7 @@ async function recordOpenAI(auto){
         fd.append("model", model);
         if(!/diariz/.test(model)) fd.append("prompt", "A Hungarian architect practising English conversation. Mostly English, sometimes Hungarian.");
         r = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"Authorization":"Bearer "+oaiKey()}, body:fd});
-        if(r.ok){ sttModelOk = model; break; }
+        if(r.ok){ sttModelOk = model; try{ localStorage.setItem("bsz-stt-model", model); }catch(e){} break; }
         let m=""; try{ m=(await r.json()).error.message; }catch(_){}
         lastErr = oaiError(r.status, m);
         if(r.status===401 || r.status===429) break;
