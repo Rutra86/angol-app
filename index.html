@@ -303,7 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
-        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 6</span>
+        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 7</span>
         <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
       </div>
       <div class="field">
@@ -787,9 +787,11 @@ function voiceChoice(){
 }
 let speakGen = 0;
 function stopSpeaking(){ speakGen++; try{ speechSynthesis.cancel(); }catch(e){} try{ if(curAudio){ curAudio.pause(); curAudio = null; } }catch(e){} }
+const MALE_RE = /\bmale\b|david|mark|george|ryan|guy\b|thomas|christopher|eric|roger|steffan|brian|andrew|davis|tony|jason|alfie|elliot|ethan|noah|oliver|daniel|fred\b|alex\b|aaron|arthur|rishi|gordon|\blee\b|liam|connor|mitchell|william|prabhat|james|richard|ralph|albert|bruce|junior|kyle|reed|rocko|grandpa|nathan|evan|tom\b|luke|ken\b|duncan|sean|neil|wayne|darren|ravi|tim\b/i;
+const isFemale = v => !MALE_RE.test(v.name.replace(/female/i,""));
 function renderVoices(){
   const sel = $("voice"); if(!sel) return;
-  const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en"));
+  const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en") && isFemale(v));
   let html = "";
   if(oaiKey()) html += `<optgroup label="OpenAI (fizetős)">${OAI_VOICES.map(([id,l])=>`<option value="openai:${id}">${l}</option>`).join("")}</optgroup>`;
   const auto = pickVoice(S.settings.accent);
@@ -1338,7 +1340,7 @@ function pickVoice(lang){
     if(/gb/i.test(lang)){ const v = edgeGB || gb || edgeUS || us; if(v) return v; }
     else { const v = edgeUS || us || edgeGB || gb; if(v) return v; }
     const L = lang.toLowerCase().replace("_","-");
-    const en = voices.filter(v=>v.lang && v.lang.toLowerCase().replace("_","-")===L);
+    const en = voices.filter(v=>v.lang && v.lang.toLowerCase().replace("_","-")===L && isFemale(v));
     const nice = /natural|neural|online|enhanced|premium|siri/i, fem = /female|samantha|serena|kate|libby|sonia|aria|jenny|emma|ava|zira|hazel|susan|karen|moira|tessa|fiona|google uk english female|google us english/i;
     const v = en.find(v=>nice.test(v.name) && fem.test(v.name)) || en.find(v=>fem.test(v.name)) || en.find(v=>nice.test(v.name));
     if(v) return v;
