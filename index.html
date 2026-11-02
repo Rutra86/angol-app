@@ -303,7 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
-        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 7</span>
+        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 8</span>
         <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
       </div>
       <div class="field">
@@ -778,11 +778,12 @@ async function translate(idx){
 let voices = [];
 function loadVoices(){ try{ voices = speechSynthesis.getVoices(); }catch(e){} }
 if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = ()=>{ loadVoices(); renderVoices(); }; }
-const OAI_VOICES = [["coral","Coral – kellemes, meleg női hang"],["shimmer","Shimmer – lágy női hang"],["sage","Sage – nyugodt női hang"],["nova","Nova – élénk, fiatalos"]];
+const OAI_VOICES = [["nova","Nova – élénk, fiatalos"],["shimmer","Shimmer – lágy női hang"]];
 const YOUNG_PITCH = 1.0;
 let curAudio = null; const ttsCache = new Map();
 function voiceChoice(){
   if(!S.settings.voiceV2){ S.settings.voiceV2 = true; S.settings.voice = ""; } // user preferred the free Google voice over OpenAI voices
+  if(/^openai:(coral|sage)$/.test(S.settings.voice||"")) S.settings.voice = "";
   return S.settings.voice || "browser:";
 }
 let speakGen = 0;
