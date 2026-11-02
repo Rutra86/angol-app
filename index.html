@@ -303,6 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
+        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 6</span>
         <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
       </div>
       <div class="field">
@@ -791,7 +792,11 @@ function renderVoices(){
   const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en"));
   let html = "";
   if(oaiKey()) html += `<optgroup label="OpenAI (fizetős)">${OAI_VOICES.map(([id,l])=>`<option value="openai:${id}">${l}</option>`).join("")}</optgroup>`;
-  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus (a legfiatalosabb ingyenes női hang)</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
+  const auto = pickVoice(S.settings.accent);
+  const nat = v => /natural|neural/i.test(v.name);
+  const short = v => v.name.replace(/^Microsoft\s+/i,"").replace(/\s*Online \(Natural\)\s*-\s*/i," – ").replace(/English \(United Kingdom\)/i,"brit").replace(/English \(United States\)/i,"amerikai");
+  en.sort((a,b)=>(nat(b)-nat(a)) || a.name.localeCompare(b.name));
+  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus${auto ? " – most: "+esc(short(auto)) : ""}</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${nat(v) ? "★ " : ""}${esc(short(v))} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
   sel.innerHTML = html; sel.value = voiceChoice();
   if(!sel.value) sel.value = "browser:";
 }
