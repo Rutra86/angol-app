@@ -145,6 +145,8 @@ nav.tabs button{font-size:.75rem}
   .app>header{grid-area:header}
   .app>main{grid-area:main}
   #composer-wrap{grid-area:composer}
+.hf-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:8px;padding-bottom:0;font-size:.9rem;color:var(--muted)}
+.hf-bar .btn{background:#c62828;color:#fff;border-color:#c62828;font-weight:700}
   nav.tabs{grid-area:nav;flex-direction:column;justify-content:flex-start;gap:4px;border-top:0;border-right:1px solid var(--line);padding:72px 10px 16px}
   nav.tabs button{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:12px;padding:11px 14px;border-radius:12px;font-size:.95rem}
   nav.tabs button[aria-selected="true"]{background:var(--tutor)}
@@ -224,6 +226,12 @@ nav.tabs button{font-size:.75rem}
     <!-- CAR -->
     <section class="view pad" id="v-car" hidden>
       <h2>Autós mód</h2>
+      <div class="note" style="margin-bottom:18px;background:var(--surface)">
+        <b>Kihangosított beszélgetés Emmával</b><br>
+        Emma beszél, utána a mikrofon magától bekapcsol, és amit mondasz, el is küldi. Nem kell hozzányúlnod a telefonhoz. Leállítás: mondd, hogy <b>„stop”</b> vagy <b>„vége”</b>, vagy nyomd meg a piros gombot.
+        <div class="row" style="margin-top:10px"><button class="btn primary" id="hf-start">Beszélgetés indítása</button></div>
+      </div>
+      <h3 style="margin:6px 0 4px">Kifejezésgyakorló</h3>
       <p class="muted">Hallgasd kihangosítva. Emma magyarul mondja a kifejezést, a szünetben mondd ki hangosan angolul, aztán meghallod a helyes angol változatot kétszer. Nem kell hozzányúlnod, körbe-körbe megy.</p>
       <div class="field">
         <label for="car-src">Mit hallgassunk?</label>
@@ -295,7 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
-        <span class="muted" style="font-size:.88rem">Az OpenAI-hangok élethűbbek (kevés díjjal járnak), a böngésző hangjai ingyenesek.</span>
+        <span class="muted" id="voice-note" style="font-size:.88rem">Az OpenAI-hangok élethűbbek (kevés díjjal járnak), a böngésző hangjai ingyenesek.</span>
       </div>
       <div class="field">
         <label for="rate">Felolvasás sebessége: <span id="rate-v">0.9</span>×</label>
@@ -334,6 +342,7 @@ nav.tabs button{font-size:.75rem}
   </main>
 
   <div id="composer-wrap">
+    <div class="hf-bar pad" id="hf-bar" hidden><span>Kihangosított mód. Mondd: „stop”, ha befejeznéd.</span><button class="btn" id="hf-stop">Leállítás</button></div>
     <div class="composer pad" id="composer">
       <button class="round mic" id="mic" aria-label="Beszéd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
       <textarea id="input" rows="1" placeholder="Írj angolul, vagy kérdezz magyarul…" aria-label="Üzenet"></textarea>
@@ -705,10 +714,11 @@ async function ask(){
     markDay();
     save();
     renderChat();
-    if(S.settings.voicemode){ speakP(reply, S.settings.accent, S.settings.rate).then(()=>{ if(S.settings.voicemode && !$("v-chat").hidden) listen(true); }); }
+    if(handsOn()){ speakP(reply, S.settings.accent, S.settings.rate).then(()=>{ if(handsOn() && !$("v-chat").hidden) listen(true); }); }
     else if(S.settings.autoread) say(reply);
   }catch(e){
     bubble.remove();
+    if(hf.on) stopHandsFree(false);
     const code = (e && (e.code || e.name)) || "unknown";
     console.error("sample failed", (e && (e.code || e.name)) || "", (e && e.message) || "");
     if(code==="cancelled" || code==="AbortError"){ return; }
@@ -767,23 +777,24 @@ async function translate(idx){
 let voices = [];
 function loadVoices(){ try{ voices = speechSynthesis.getVoices(); }catch(e){} }
 if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = ()=>{ loadVoices(); renderVoices(); }; }
-const OAI_VOICES = [["nova","Nova – fiatal, élénk"],["shimmer","Shimmer – fiatal, lágy"],["coral","Coral – barátságos, meleg"],["sage","Sage – nyugodt"]];
-const YOUNG_PITCH = 1.12;
+const OAI_VOICES = [["coral","Coral – kellemes, meleg női hang"],["shimmer","Shimmer – lágy női hang"],["sage","Sage – nyugodt női hang"],["nova","Nova – élénk, fiatalos"]];
+const YOUNG_PITCH = 1.0;
 let curAudio = null; const ttsCache = new Map();
-function voiceChoice(){ return S.settings.voice || (oaiKey() ? "openai:nova" : "browser:"); }
+function voiceChoice(){ return S.settings.voice || (oaiKey() ? "openai:coral" : "browser:"); }
 function stopSpeaking(){ try{ speechSynthesis.cancel(); }catch(e){} try{ if(curAudio){ curAudio.pause(); curAudio = null; } }catch(e){} }
 function renderVoices(){
   const sel = $("voice"); if(!sel) return;
   const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en"));
   let html = "";
   if(oaiKey()) html += `<optgroup label="OpenAI (élethű)">${OAI_VOICES.map(([id,l])=>`<option value="openai:${id}">${l}</option>`).join("")}</optgroup>`;
-  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus (kicsit fiatalított)</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
+  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus (a legtermészetesebb elérhető)</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
   sel.innerHTML = html; sel.value = voiceChoice();
   if(!sel.value) sel.value = "browser:";
 }
 function pickTtsModel(){
   const ids = (oaiAllIds||[]).filter(id=>/tts/.test(id) && !/realtime|audio-preview/.test(id));
-  return ids.find(id=>/mini-tts/.test(id)) || ids.find(id=>!/^tts-1/.test(id)) || ids[0] || "tts-1";
+  ids.sort((x,y)=>y.localeCompare(x, undefined, {numeric:true})); // newest first
+  return ids.find(id=>!/^tts-1/.test(id) && !/mini/.test(id)) || ids.find(id=>!/^tts-1/.test(id)) || ids.find(id=>/hd/.test(id)) || ids[0] || "tts-1";
 }
 async function oaiTTS(text, voice, rate){
   const key = oaiKey(); const model = pickTtsModel();
@@ -791,7 +802,7 @@ async function oaiTTS(text, voice, rate){
   let url = ttsCache.get(ck);
   if(!url){
     const body = {model, voice, input:text, speed: Math.max(0.25, Math.min(4, rate||1))};
-    if(!/^tts-1/.test(model)) body.instructions = "Voice: a cheerful, friendly young woman in her mid-twenties, a language tutor. Natural, warm and clear.";
+    if(!/^tts-1/.test(model)) body.instructions = "Voice: a warm, pleasant, natural-sounding woman in her early thirties, a kind English tutor. Affect: calm, friendly and genuinely human, never robotic. Tone: soft and reassuring. Pacing: relaxed, clear articulation with natural pauses.";
     let r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)});
     if(!r.ok && r.status===400 && body.instructions){ delete body.instructions; r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)}); }
     if(!r.ok) throw new Error("tts "+r.status);
@@ -824,7 +835,7 @@ async function speakEN(text, rate){
   if(!text) return;
   const vc = voiceChoice();
   if(vc.startsWith("openai:") && oaiKey()){
-    try{ await oaiTTS(text, vc.slice(7), rate); return; }catch(e){ /* fall back to the browser voice */ }
+    try{ await oaiTTS(text, vc.slice(7), rate); return; }catch(e){ window.dispatchEvent(new CustomEvent("tts-fallback",{detail:String(e && e.message || e).slice(0,60)})); }
   }
   await browserSpeak(text, S.settings.accent, rate, true);
 }
@@ -832,6 +843,7 @@ function say(text){ if(!text) return; stopSpeaking(); speakEN(text, S.settings.r
 
 let rec = null, recOn = false;
 function micHint(msg){
+  if(hf.on) stopHandsFree(false);
   recWanted = false; clearTimeout(recTimer);
   try{ rec && rec.abort(); }catch(e){}
   recOn=false; $("mic").classList.remove("on");
@@ -856,9 +868,9 @@ function startListening(auto){
     $("mic").classList.remove("on"); $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
     $("input").value = committed.trim() ? committed.trim()+" " : $("input").value; autosize();
     if(cs.length) lastClarity = Math.round(100*cs.reduce((x,y)=>x+y,0)/cs.length);
-    if(!$("input").value.trim()) return;
+    if(!$("input").value.trim()){ if(hf.on && recOk) setTimeout(()=>{ if(hf.on) listen(true); }, 300); return; }
     lastSpoken = true;
-    if(S.settings.voicemode){ $("input").value = $("input").value.trim(); send(); }
+    if(handsOn()){ $("input").value = $("input").value.trim(); if(!hfCommand($("input").value)) send(); }
   };
   const begin = () => {
     rec = new SR(); rec.lang = S.settings.accent; rec.interimResults = true;
@@ -901,6 +913,33 @@ function toggleMic(){
   if(recOn){ if(mrec) stopRecording(); else stopListening(); return; }
   stopSpeaking();
   listen(false);
+}
+/* ---------- hands-free (car) conversation ---------- */
+const hf = {on:false, wake:null};
+let recOk = true;
+function handsOn(){ return hf.on || S.settings.voicemode; }
+function hfCommand(t){
+  if(!hf.on) return false;
+  const w = String(t).toLowerCase().replace(/[^a-záéíóöőúüű ]/g," ").trim();
+  if(/^(stop|stopp|vége|vege|állj|allj|leállítás|befejeztem|that s all|bye|goodbye|bye emma|goodbye emma)( emma)?( stop)?$/.test(w)){
+    $("input").value = ""; autosize(); stopHandsFree(true); return true;
+  }
+  return false;
+}
+async function startHandsFree(){
+  if(typeof stopCar==="function" && car.playing) stopCar();
+  hf.on = true; $("hf-bar").hidden = false; show("chat"); markDay(); save();
+  try{ if(navigator.wakeLock) hf.wake = await navigator.wakeLock.request("screen"); }catch(e){}
+  const c = chatOf(); const last = c[c.length-1];
+  const opener = (last && last.role==="assistant") ? last.content : "Hi! I'm listening. What would you like to talk about?";
+  await speakP(opener, S.settings.accent, S.settings.rate);
+  if(hf.on && !$("v-chat").hidden) listen(true);
+}
+function stopHandsFree(sayBye){
+  hf.on = false; $("hf-bar").hidden = true;
+  try{ if(mrec) stopRecording(); else if(recOn) stopListening(); }catch(e){}
+  try{ hf.wake && hf.wake.release(); }catch(e){} hf.wake = null;
+  if(sayBye){ stopSpeaking(); speakP("Okay, great job today! See you next time.", S.settings.accent, S.settings.rate); }
 }
 function oaiKey(){ try{ return localStorage.getItem(OAI_KEY_LS)||""; }catch(e){ return ""; } }
 function sttEngine(){ return S.settings.stt || (oaiKey() ? "openai" : "browser"); }
@@ -945,7 +984,7 @@ async function recordOpenAI(auto){
     try{ mctx && mctx.close(); }catch(_){}
     const blobType = (mrec && mrec.mimeType) || type || "audio/webm";
     mrec = null; recOn = false; $("mic").classList.remove("on");
-    if(!chunks.length || !spoke){ $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…"; if(!spoke) micHint("Nem hallottam semmit. Ellenőrizd, hogy a jó mikrofon van-e kiválasztva, és beszélj hangosabban."); return; }
+    if(!chunks.length || !spoke){ $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…"; if(hf.on){ setTimeout(()=>{ if(hf.on) listen(true); }, 300); return; } if(!spoke) micHint("Nem hallottam semmit. Ellenőrizd, hogy a jó mikrofon van-e kiválasztva, és beszélj hangosabban."); return; }
     $("input").placeholder = "Szöveggé alakítom…";
     try{
       const blob = new Blob(chunks, {type: blobType});
@@ -963,7 +1002,7 @@ async function recordOpenAI(auto){
       const base = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
       $("input").value = base + text; autosize();
       lastSpoken = true; lastClarity = null;
-      if(S.settings.voicemode) send();
+      if(handsOn() && !hfCommand(text)) send();
     }catch(e){
       $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
       micHint("A szöveggé alakítás nem sikerült" + (e && e.code==="auth" ? ": az OpenAI-kulcs nem érvényes." : e && e.code==="credit" ? ": elfogyott az OpenAI-egyenleg." : ". ") + (e && e.message ? " ("+String(e.message).slice(0,120)+")" : ""));
@@ -1045,6 +1084,7 @@ $("voicemode").onchange=e=>{ S.settings.voicemode=e.target.checked; save(); };
 $("stt").onchange=e=>{ S.settings.stt=e.target.value; save(); };
 $("voice").onchange=e=>{ S.settings.voice=e.target.value; save(); say("Hi! I'm Emma. Shall we practise some English today?"); };
 $("voice-test").onclick=()=>say("Hi! I'm Emma. Shall we practise some English today?");
+window.addEventListener("tts-fallback", e=>{ const n=$("voice-note"); if(n) n.textContent = "Az OpenAI-hang most nem szólalt meg ("+e.detail+"), ezért a böngésző hangját hallod. Ellenőrizd az OpenAI-kulcsot és az egyenleget."; });
 $("model").onchange=e=>{ S.settings.model=e.target.value; save(); };
 $("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(!v) return;
   // pick the provider from the key itself
@@ -1073,6 +1113,7 @@ $("reset-chat").onclick=e=>{
 
 /* ---------- events ---------- */
 function show(v){
+  if(v!=="chat" && hf.on) stopHandsFree(false);
   ["chat","vocab","read","car","set","test"].forEach(x=>$("v-"+x).hidden = x!==v);
   if(v==="test") renderTest();
   if(v==="read") renderRead();
@@ -1273,6 +1314,13 @@ function renderCar(){
     <div class="count">${car.idx+1} / ${items.length}</div>`;
 }
 function pickVoice(lang){
+  if(/^en/i.test(lang)){
+    const L = lang.toLowerCase().replace("_","-");
+    const en = voices.filter(v=>v.lang && v.lang.toLowerCase().replace("_","-")===L);
+    const nice = /natural|neural|online|enhanced|premium|siri/i, fem = /female|samantha|serena|kate|libby|sonia|aria|jenny|emma|ava|zira|hazel|susan|karen|moira|tessa|fiona|google uk english female|google us english/i;
+    const v = en.find(v=>nice.test(v.name) && fem.test(v.name)) || en.find(v=>fem.test(v.name)) || en.find(v=>nice.test(v.name));
+    if(v) return v;
+  }
   return voices.find(v=>v.lang===lang) || voices.find(v=>v.lang && v.lang.replace("_","-").toLowerCase().startsWith(lang.slice(0,2).toLowerCase()));
 }
 function speakP(text, lang, rate){
@@ -1326,8 +1374,11 @@ function carJump(d){
 }
 document.addEventListener("visibilitychange", async ()=>{
   if(document.visibilityState==="visible" && car.playing && !car.wake){ try{ car.wake = await navigator.wakeLock.request("screen"); }catch(e){} }
-  if(document.visibilityState!=="visible") car.wake=null;
+  if(document.visibilityState==="visible" && hf.on && !hf.wake){ try{ hf.wake = await navigator.wakeLock.request("screen"); }catch(e){} }
+  if(document.visibilityState!=="visible"){ car.wake=null; hf.wake=null; }
 });
+$("hf-start").onclick = startHandsFree;
+$("hf-stop").onclick = ()=>stopHandsFree(false);
 $("car-play").onclick = ()=> car.playing ? stopCar() : startCar();
 $("car-prev").onclick = ()=>carJump(-1);
 $("car-next").onclick = ()=>carJump(1);
