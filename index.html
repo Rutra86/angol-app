@@ -85,7 +85,8 @@ nav.tabs svg{width:22px;height:22px}
 .round svg{width:22px;height:22px}
 .send{background:var(--brand);color:var(--brand-ink)}
 .mic{background:var(--surface);border:1px solid var(--line)}
-.mic.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+.mic.on{background:var(--warn);color:#fff;border-color:var(--warn);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(240,138,93,.5)}50%{box-shadow:0 0 0 8px rgba(240,138,93,0)}}
 .round:disabled{opacity:.45}
 .hint{font-size:.8rem;color:var(--muted);padding-block:0 6px}
 
@@ -152,7 +153,7 @@ nav.tabs button{font-size:.75rem}
   .msg,.fb{max-width:70%}
   .card{min-height:220px}
 }
-@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.mic.on{animation:none}}
 </style>
 
 </head>
@@ -766,40 +767,67 @@ function say(text){
 
 let rec = null, recOn = false;
 function micHint(msg){
+  recWanted = false; clearTimeout(recTimer);
   try{ rec && rec.abort(); }catch(e){}
   recOn=false; $("mic").classList.remove("on");
   $("chat").insertAdjacentHTML("beforeend", `<div class="err">${esc(msg || "A mikrofont nem sikerült elindítani. Engedélyezd a mikrofont a böngészőben (a címsor melletti lakat ikon), vagy nyisd meg az appot Chrome-ban.")}</div>`);
   scrollDown();
 }
+// Listening keeps going across short pauses: the browser ends each recognition
+// session after a pause, so we restart it and keep what was already recognised.
+// It stops when you tap the mic again, or after a longer silence.
+const SILENCE_MS = 4000, FIRST_WORD_MS = 10000;
+let recWanted = false, recTimer = null;
+function stopListening(){ recWanted = false; clearTimeout(recTimer); try{ rec && rec.stop(); }catch(e){} }
 function startListening(auto){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ micHint("Ez a böngésző nem támogatja a beszédfelismerést. Nyisd meg az appot Chrome-ban."); return; }
   if(recOn || busy) return;
-  try{
+  let committed = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
+  const cs = [];
+  const arm = ms => { clearTimeout(recTimer); recTimer = setTimeout(stopListening, ms); };
+  const finish = () => {
+    recOn = false; recWanted = false; clearTimeout(recTimer);
+    $("mic").classList.remove("on"); $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
+    $("input").value = committed.trim() ? committed.trim()+" " : $("input").value; autosize();
+    if(cs.length) lastClarity = Math.round(100*cs.reduce((x,y)=>x+y,0)/cs.length);
+    if(!$("input").value.trim()) return;
+    lastSpoken = true;
+    if(S.settings.voicemode){ $("input").value = $("input").value.trim(); send(); }
+  };
+  const begin = () => {
     rec = new SR(); rec.lang = S.settings.accent; rec.interimResults = true; rec.continuous = false;
-    const base = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
     rec.onresult = ev => {
-      let t="", cs=[];
-      for(const r of ev.results){ t += r[0].transcript; if(r.isFinal && r[0].confidence>0) cs.push(r[0].confidence); }
-      $("input").value = base + t; autosize();
-      if(cs.length) lastClarity = Math.round(100*cs.reduce((a,b)=>a+b,0)/cs.length);
+      let interim = "";
+      for(let i = ev.resultIndex; i < ev.results.length; i++){
+        const r = ev.results[i];
+        if(r.isFinal){ committed += r[0].transcript.trim() + " "; if(r[0].confidence > 0) cs.push(r[0].confidence); }
+        else interim += r[0].transcript;
+      }
+      $("input").value = committed + interim; autosize();
+      arm(SILENCE_MS);
     };
     rec.onerror = ev => {
-      if(ev.error==="not-allowed" || ev.error==="service-not-allowed") micHint();
-      else if(ev.error==="audio-capture") micHint("Nem található mikrofon.");
-      else if(ev.error==="network") micHint("A beszédfelismeréshez internet kell.");
+      if(ev.error==="not-allowed" || ev.error==="service-not-allowed"){ recWanted=false; micHint(); }
+      else if(ev.error==="audio-capture"){ recWanted=false; micHint("Nem található mikrofon."); }
+      else if(ev.error==="network"){ recWanted=false; micHint("A beszédfelismeréshez internet kell."); }
+      // "no-speech" and "aborted": keep going until the silence timer or a tap ends it
     };
     rec.onend = () => {
-      recOn=false; $("mic").classList.remove("on");
-      if(!$("input").value.trim()) return;
-      lastSpoken = true;
-      if(S.settings.voicemode) send();
+      if(recWanted){ try{ begin(); return; }catch(e){} }
+      finish();
     };
-    rec.start(); recOn = true; $("mic").classList.add("on");
-  }catch(e){ micHint(); }
+    rec.start();
+  };
+  try{
+    recWanted = true; recOn = true; $("mic").classList.add("on");
+    $("input").placeholder = "Hallgatlak… koppints újra a mikrofonra, ha befejezted.";
+    arm(FIRST_WORD_MS);
+    begin();
+  }catch(e){ recWanted = false; micHint(); }
 }
 function toggleMic(){
-  if(recOn){ try{ rec.stop(); }catch(e){} return; }
+  if(recOn){ stopListening(); return; }
   try{ speechSynthesis.cancel(); }catch(e){}
   startListening(false);
 }
