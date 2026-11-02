@@ -303,7 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
-        <span class="muted" id="voice-note" style="font-size:.88rem">Az OpenAI-hangok élethűbbek (kevés díjjal járnak), a böngésző hangjai ingyenesek.</span>
+        <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
       </div>
       <div class="field">
         <label for="rate">Felolvasás sebessége: <span id="rate-v">0.9</span>×</label>
@@ -780,14 +780,18 @@ if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged =
 const OAI_VOICES = [["coral","Coral – kellemes, meleg női hang"],["shimmer","Shimmer – lágy női hang"],["sage","Sage – nyugodt női hang"],["nova","Nova – élénk, fiatalos"]];
 const YOUNG_PITCH = 1.0;
 let curAudio = null; const ttsCache = new Map();
-function voiceChoice(){ return S.settings.voice || (oaiKey() ? "openai:coral" : "browser:"); }
-function stopSpeaking(){ try{ speechSynthesis.cancel(); }catch(e){} try{ if(curAudio){ curAudio.pause(); curAudio = null; } }catch(e){} }
+function voiceChoice(){
+  if(!S.settings.voiceV2){ S.settings.voiceV2 = true; S.settings.voice = ""; } // user preferred the free Google voice over OpenAI voices
+  return S.settings.voice || "browser:";
+}
+let speakGen = 0;
+function stopSpeaking(){ speakGen++; try{ speechSynthesis.cancel(); }catch(e){} try{ if(curAudio){ curAudio.pause(); curAudio = null; } }catch(e){} }
 function renderVoices(){
   const sel = $("voice"); if(!sel) return;
   const en = voices.filter(v=>v.lang && v.lang.toLowerCase().startsWith("en"));
   let html = "";
-  if(oaiKey()) html += `<optgroup label="OpenAI (élethű)">${OAI_VOICES.map(([id,l])=>`<option value="openai:${id}">${l}</option>`).join("")}</optgroup>`;
-  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus (a legtermészetesebb elérhető)</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
+  if(oaiKey()) html += `<optgroup label="OpenAI (fizetős)">${OAI_VOICES.map(([id,l])=>`<option value="openai:${id}">${l}</option>`).join("")}</optgroup>`;
+  html += `<optgroup label="Böngésző (ingyenes)"><option value="browser:">Automatikus (a legfiatalosabb ingyenes női hang)</option>${en.map(v=>`<option value="browser:${esc(v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join("")}</optgroup>`;
   sel.innerHTML = html; sel.value = voiceChoice();
   if(!sel.value) sel.value = "browser:";
 }
@@ -797,7 +801,8 @@ function pickTtsModel(){
   return ids.find(id=>!/^tts-1/.test(id) && !/mini/.test(id)) || ids.find(id=>!/^tts-1/.test(id)) || ids.find(id=>/hd/.test(id)) || ids[0] || "tts-1";
 }
 async function oaiTTS(text, voice, rate){
-  const key = oaiKey(); const model = pickTtsModel();
+  const key = oaiKey(); const model = pickTtsModel(); const gen = speakGen;
+  rate = 1; // OpenAI voices sound most natural at their own pace; slowing them down makes them drag
   const ck = model+"|"+voice+"|"+rate+"|"+text;
   let url = ttsCache.get(ck);
   if(!url){
@@ -809,6 +814,8 @@ async function oaiTTS(text, voice, rate){
     url = URL.createObjectURL(await r.blob());
     ttsCache.set(ck, url); if(ttsCache.size > 40){ const k = ttsCache.keys().next().value; URL.revokeObjectURL(ttsCache.get(k)); ttsCache.delete(k); }
   }
+  if(gen !== speakGen) return; // stopped or replaced while loading: never play two voices at once
+  try{ if(curAudio){ curAudio.pause(); } }catch(e){}
   await new Promise(res=>{
     const a = new Audio(url); curAudio = a;
     a.onended = a.onerror = a.onpause = () => { if(curAudio===a) curAudio = null; res(); };
@@ -823,6 +830,7 @@ function browserSpeak(text, lang, rate, young){
       u.lang = lang; u.rate = rate;
       const vc = voiceChoice(); const named = vc.startsWith("browser:") && vc.slice(8) ? voices.find(v=>v.name===vc.slice(8)) : null;
       const v = (young && named) || pickVoice(lang); if(v) u.voice = v;
+      if(u.voice && u.voice.lang) u.lang = u.voice.lang;
       if(young) u.pitch = YOUNG_PITCH;
       const done = ()=>{ clearTimeout(t); res(); };
       const t = setTimeout(done, 4000 + text.length*150); // safety if onend never fires
@@ -833,10 +841,12 @@ function browserSpeak(text, lang, rate, young){
 }
 async function speakEN(text, rate){
   if(!text) return;
+  const gen = speakGen;
   const vc = voiceChoice();
   if(vc.startsWith("openai:") && oaiKey()){
     try{ await oaiTTS(text, vc.slice(7), rate); return; }catch(e){ window.dispatchEvent(new CustomEvent("tts-fallback",{detail:String(e && e.message || e).slice(0,60)})); }
   }
+  if(gen !== speakGen) return;
   await browserSpeak(text, S.settings.accent, rate, true);
 }
 function say(text){ if(!text) return; stopSpeaking(); speakEN(text, S.settings.rate); }
@@ -1315,6 +1325,13 @@ function renderCar(){
 }
 function pickVoice(lang){
   if(/^en/i.test(lang)){
+    // Edge's free neural voices sound youngest and most natural; then Google's voices (Chrome)
+    const find = re => voices.find(v=>re.test(v.name));
+    const edgeGB = find(/libby.*natural/i) || find(/maisie.*natural/i) || find(/sonia.*natural/i);
+    const edgeUS = find(/jenny.*natural/i) || find(/aria.*natural/i) || find(/ava.*natural/i) || find(/emma.*natural/i);
+    const gb = find(/google uk english female/i), us = find(/google us english/i);
+    if(/gb/i.test(lang)){ const v = edgeGB || gb || edgeUS || us; if(v) return v; }
+    else { const v = edgeUS || us || edgeGB || gb; if(v) return v; }
     const L = lang.toLowerCase().replace("_","-");
     const en = voices.filter(v=>v.lang && v.lang.toLowerCase().replace("_","-")===L);
     const nice = /natural|neural|online|enhanced|premium|siri/i, fem = /female|samantha|serena|kate|libby|sonia|aria|jenny|emma|ava|zira|hazel|susan|karen|moira|tessa|fiona|google uk english female|google us english/i;
