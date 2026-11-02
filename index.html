@@ -299,6 +299,13 @@ nav.tabs button{font-size:.75rem}
         <div class="toggle"><input type="checkbox" id="autoread"><label for="autoread">Tanár válaszainak automatikus felolvasása</label></div>
       </div>
       <div class="field">
+        <label for="stt">Beszédfelismerés</label>
+        <select id="stt">
+          <option value="openai">OpenAI (pontosabb, minden böngészőben működik, kevés díjjal jár)</option>
+          <option value="browser">Böngésző beépített (ingyenes, csak Chrome-ban megbízható)</option>
+        </select>
+      </div>
+      <div class="field">
         <div class="toggle"><input type="checkbox" id="voicemode"><label for="voicemode">Folyamatos hangos beszélgetés (Emma felolvas, utána magától hallgat, és amit mondasz, el is küldi)</label></div>
       </div>
       <div class="field">
@@ -431,7 +438,7 @@ function oaiError(status, m){
   else if(status>=500) code = "overloaded";
   return {code, message:(status+" "+m).slice(0,200)};
 }
-let oaiModels = null;
+let oaiModels = null, oaiAllIds = [];
 async function loadOaiModels(force){
   const key = (()=>{ try{ return localStorage.getItem(OAI_KEY_LS)||""; }catch(e){ return ""; } })();
   const sel = $("oai-model");
@@ -443,6 +450,7 @@ async function loadOaiModels(force){
     if(!r.ok){ let m=""; try{ m=(await r.json()).error.message; }catch(_){} throw oaiError(r.status, m); }
     const j = await r.json();
     const skip = /(audio|realtime|tts|transcri|image|embed|search|instruct|codex|moderation|dall|whisper|davinci|babbage|preview-\d{4}|computer)/i;
+    oaiAllIds = (j.data||[]).map(m=>m.id);
     oaiModels = (j.data||[]).filter(m=>/^(gpt-|o\d|chatgpt)/i.test(m.id) && !skip.test(m.id)).sort((a,b)=>(b.created||0)-(a.created||0)).map(m=>m.id);
     if(!oaiModels.length) throw {code:"model", message:"Nincs elérhető csevegő modell ehhez a kulcshoz."};
     fillOai();
@@ -691,7 +699,7 @@ async function ask(){
     markDay();
     save();
     renderChat();
-    if(S.settings.voicemode){ speakP(reply, S.settings.accent, S.settings.rate).then(()=>{ if(S.settings.voicemode && !$("v-chat").hidden) startListening(true); }); }
+    if(S.settings.voicemode){ speakP(reply, S.settings.accent, S.settings.rate).then(()=>{ if(S.settings.voicemode && !$("v-chat").hidden) listen(true); }); }
     else if(S.settings.autoread) say(reply);
   }catch(e){
     bubble.remove();
@@ -784,7 +792,7 @@ function startListening(auto){
   if(!SR){ micHint("Ez a böngésző nem támogatja a beszédfelismerést. Nyisd meg az appot Chrome-ban."); return; }
   if(recOn || busy) return;
   let committed = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
-  const cs = [];
+  const cs = []; let quick = 0;
   const arm = ms => { clearTimeout(recTimer); recTimer = setTimeout(stopListening, ms); };
   const finish = () => {
     recOn = false; recWanted = false; clearTimeout(recTimer);
@@ -796,7 +804,9 @@ function startListening(auto){
     if(S.settings.voicemode){ $("input").value = $("input").value.trim(); send(); }
   };
   const begin = () => {
-    rec = new SR(); rec.lang = S.settings.accent; rec.interimResults = true; rec.continuous = false;
+    rec = new SR(); rec.lang = S.settings.accent; rec.interimResults = true;
+    // desktop Chrome handles continuous mode well; on Android it duplicates text, so there we restart per phrase
+    rec.continuous = !/Android/i.test(navigator.userAgent);
     rec.onresult = ev => {
       let interim = "";
       for(let i = ev.resultIndex; i < ev.results.length; i++){
@@ -811,10 +821,14 @@ function startListening(auto){
       if(ev.error==="not-allowed" || ev.error==="service-not-allowed"){ recWanted=false; micHint(); }
       else if(ev.error==="audio-capture"){ recWanted=false; micHint("Nem található mikrofon."); }
       else if(ev.error==="network"){ recWanted=false; micHint("A beszédfelismeréshez internet kell."); }
+      else if(ev.error!=="no-speech" && ev.error!=="aborted"){ recWanted=false; micHint("A böngésző beszédfelismerése hibát adott ("+ev.error+"). Válts a Beállításokban OpenAI beszédfelismerésre."); }
       // "no-speech" and "aborted": keep going until the silence timer or a tap ends it
     };
+    const t0 = Date.now();
     rec.onend = () => {
-      if(recWanted){ try{ begin(); return; }catch(e){} }
+      quick = (Date.now()-t0 < 400) ? quick+1 : 0;
+      if(quick >= 5){ recWanted = false; finish(); micHint("A böngésző beépített beszédfelismerése itt nem működik. Válts a Beállításokban OpenAI beszédfelismerésre."); return; }
+      if(recWanted){ setTimeout(()=>{ if(!recWanted){ finish(); return; } try{ begin(); }catch(e){ finish(); } }, 250); return; }
       finish();
     };
     rec.start();
@@ -827,9 +841,80 @@ function startListening(auto){
   }catch(e){ recWanted = false; micHint(); }
 }
 function toggleMic(){
-  if(recOn){ stopListening(); return; }
+  if(recOn){ if(mrec) stopRecording(); else stopListening(); return; }
   try{ speechSynthesis.cancel(); }catch(e){}
-  startListening(false);
+  listen(false);
+}
+function oaiKey(){ try{ return localStorage.getItem(OAI_KEY_LS)||""; }catch(e){ return ""; } }
+function sttEngine(){ return S.settings.stt || (oaiKey() ? "openai" : "browser"); }
+function listen(auto){
+  if(sttEngine()==="openai" && oaiKey() && navigator.mediaDevices && window.MediaRecorder) recordOpenAI(auto);
+  else startListening(auto);
+}
+
+/* ---------- OpenAI speech-to-text: record, detect silence, transcribe ---------- */
+let mrec = null, mstream = null, mctx = null;
+function stopRecording(){ try{ mrec && mrec.state!=="inactive" && mrec.stop(); }catch(e){} }
+function pickTranscribeModel(){
+  const ids = oaiAllIds || [];
+  return ids.find(id=>/transcribe$/.test(id) && !/mini/.test(id)) || ids.find(id=>/transcribe/.test(id) && !/diariz/.test(id)) || "whisper-1";
+}
+async function recordOpenAI(auto){
+  if(recOn || busy) return;
+  try{ mstream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}}); }
+  catch(e){ micHint("Nem kaptam hozzáférést a mikrofonhoz. Engedélyezd a böngészőben (lakat ikon a címsor mellett), és próbáld újra."); return; }
+  const type = ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].find(t=>{ try{ return MediaRecorder.isTypeSupported(t); }catch(_){ return false; } }) || "";
+  const chunks = [];
+  mrec = type ? new MediaRecorder(mstream, {mimeType:type}) : new MediaRecorder(mstream);
+  mrec.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
+  // silence detection
+  let spoke = false, lastLoud = Date.now(); const started = Date.now();
+  try{
+    mctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = mctx.createMediaStreamSource(mstream); const an = mctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const tick = () => {
+      if(!mrec || mrec.state==="inactive") return;
+      an.getFloatTimeDomainData(buf); let sum=0; for(const v of buf) sum += v*v; const rms = Math.sqrt(sum/buf.length);
+      if(rms > 0.02){ spoke = true; lastLoud = Date.now(); }
+      const now = Date.now();
+      if((spoke && now-lastLoud > SILENCE_MS) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 90000) stopRecording();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }catch(e){}
+  mrec.onstop = async () => {
+    try{ mstream.getTracks().forEach(t=>t.stop()); }catch(_){}
+    try{ mctx && mctx.close(); }catch(_){}
+    const blobType = (mrec && mrec.mimeType) || type || "audio/webm";
+    mrec = null; recOn = false; $("mic").classList.remove("on");
+    if(!chunks.length || !spoke){ $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…"; if(!spoke) micHint("Nem hallottam semmit. Ellenőrizd, hogy a jó mikrofon van-e kiválasztva, és beszélj hangosabban."); return; }
+    $("input").placeholder = "Szöveggé alakítom…";
+    try{
+      const blob = new Blob(chunks, {type: blobType});
+      const ext = /mp4/.test(blobType) ? "m4a" : /ogg/.test(blobType) ? "ogg" : "webm";
+      const fd = new FormData();
+      fd.append("file", blob, "speech."+ext);
+      fd.append("model", pickTranscribeModel());
+      fd.append("prompt", "A Hungarian architect practising English conversation. Mostly English, sometimes Hungarian.");
+      const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"Authorization":"Bearer "+oaiKey()}, body:fd});
+      if(!r.ok){ let m=""; try{ m=(await r.json()).error.message; }catch(_){} throw oaiError(r.status, m); }
+      const j = await r.json();
+      const text = String(j.text||"").trim();
+      $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
+      if(!text){ micHint("Nem sikerült szöveget felismerni. Próbáld újra."); return; }
+      const base = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
+      $("input").value = base + text; autosize();
+      lastSpoken = true; lastClarity = null;
+      if(S.settings.voicemode) send();
+    }catch(e){
+      $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
+      micHint("A szöveggé alakítás nem sikerült" + (e && e.code==="auth" ? ": az OpenAI-kulcs nem érvényes." : e && e.code==="credit" ? ": elfogyott az OpenAI-egyenleg." : ". ") + (e && e.message ? " ("+String(e.message).slice(0,120)+")" : ""));
+    }
+  };
+  mrec.start(250);
+  recOn = true; $("mic").classList.add("on");
+  $("input").placeholder = "Hallgatlak… koppints újra a mikrofonra, ha befejezted.";
 }
 
 /* ---------- vocab (simple spaced repetition) ---------- */
@@ -893,13 +978,14 @@ function renderStreak(){
 function renderSettings(){
   const s=S.settings;
   $("level").value=s.level; $("accent").value=s.accent; $("rate").value=s.rate; $("rate-v").textContent=(+s.rate).toFixed(2);
-  $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); renderKeyState();
+  $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); $("stt").value=sttEngine(); renderKeyState();
 }
 ["level","accent"].forEach(id=>$(id).onchange=e=>{ S.settings[id]=e.target.value; save(); });
 $("rate").oninput=e=>{ S.settings.rate=+e.target.value; $("rate-v").textContent=(+e.target.value).toFixed(2); save(); };
 $("rate").onchange=()=>say("This is how fast I will speak.");
 $("autoread").onchange=e=>{ S.settings.autoread=e.target.checked; save(); };
 $("voicemode").onchange=e=>{ S.settings.voicemode=e.target.checked; save(); };
+$("stt").onchange=e=>{ S.settings.stt=e.target.value; save(); };
 $("model").onchange=e=>{ S.settings.model=e.target.value; save(); };
 $("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(!v) return;
   // pick the provider from the key itself
@@ -907,7 +993,7 @@ $("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(
   else if(/^sk-/.test(v)) S.settings.provider = "openai";
   else { $("apikey-state").textContent = "Ez nem API-kulcsnak tűnik. Az OpenAI-kulcs sk- kezdetű, a Claude-kulcs sk-ant- kezdetű."; return; }
   save(); $("provider").value = S.settings.provider;
-  try{ localStorage.setItem(keyName(), v); }catch(e){} $("apikey").value=""; samplePromise=null; oaiModels=null; renderKeyState(); };
+  try{ localStorage.setItem(keyName(), v); }catch(e){} $("apikey").value=""; samplePromise=null; oaiModels=null; $("stt").value=sttEngine(); renderKeyState(); };
 $("apikey-del").onclick=()=>{ try{ localStorage.removeItem(keyName()); }catch(e){} samplePromise=null; oaiModels=null; renderKeyState(); };
 $("provider").onchange=e=>{ S.settings.provider=e.target.value; save(); samplePromise=null; renderKeyState(); };
 $("oai-model").onchange=e=>{ if(e.target.value){ S.settings.oaiModel=e.target.value; save(); } };
