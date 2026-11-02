@@ -1,0 +1,1191 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Beszélj Angolul</title>
+<meta name="description" content="Saját angol beszélgetésgyakorló AI tanárral">
+<meta name="theme-color" content="#16295e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: one-screen phone app. Top bar, scrolling content, fixed composer + bottom tabs. Corrections look like highlighter marks. */
+:root{
+  --bg:#f2f5fb; --surface:#ffffff; --ink:#0f1d3a; --muted:#596985; --line:#d4dcea;
+  --brand:#1e3fa8; --brand-ink:#ffffff; --tutor:#e6edf9; --me:#16295e; --me-ink:#ffffff;
+  --mark:#ffe45c; --mark-ink:#2b2400; --warn:#b4471f;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a1226; --surface:#111c36; --ink:#e3eaf7; --muted:#94a3c0; --line:#24314f;
+  --brand:#5d8bff; --brand-ink:#06122b; --tutor:#172442; --me:#2a4bb0; --me-ink:#ffffff;
+  --mark:#e6c934; --mark-ink:#1c1700; --warn:#f08a5d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a1226; --surface:#111c36; --ink:#e3eaf7; --muted:#94a3c0; --line:#24314f;
+  --brand:#5d8bff; --brand-ink:#06122b; --tutor:#172442; --me:#2a4bb0; --me-ink:#ffffff;
+  --mark:#e6c934; --mark-ink:#1c1700; --warn:#f08a5d; color-scheme:dark}
+html,body{height:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}
+body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--mark);outline-offset:2px}
+.app{height:100%;display:flex;flex-direction:column;max-width:720px;margin:0 auto}
+.pad{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{padding-block:12px 8px;display:flex;align-items:center;gap:10px}
+header h1{font-family:var(--display);font-weight:800;font-size:1.35rem;margin:0;letter-spacing:-.01em}
+header h1 span{background:var(--mark);color:var(--mark-ink);padding:0 7px;border-radius:6px}
+.streak{margin-left:auto;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+main{flex:1;min-height:0;overflow-y:auto}
+.view{padding-block:8px 16px}
+nav.tabs{display:flex;border-top:1px solid var(--line);background:var(--surface)}
+nav.tabs button{flex:1;background:none;border:0;padding:10px 4px calc(10px + env(safe-area-inset-bottom,0px));font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button[aria-selected="true"]{color:var(--brand);font-weight:700}
+nav.tabs svg{width:22px;height:22px}
+
+/* scenario chips */
+.scen{display:flex;gap:8px;overflow-x:auto;padding-block:4px 10px;scrollbar-width:none}
+.scen::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:.9rem}
+.chip[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:var(--brand-ink);font-weight:700}
+
+/* chat */
+.chat{display:flex;flex-direction:column;gap:10px}
+.msg{max-width:86%;padding:10px 13px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.tutor{background:var(--tutor);border-bottom-left-radius:4px;align-self:flex-start}
+.msg.me{background:var(--me);color:var(--me-ink);border-bottom-right-radius:4px;align-self:flex-end}
+.msg .tools{display:flex;gap:6px;margin-top:6px}
+.icon-btn{background:none;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:.8rem;color:var(--muted);display:inline-flex;align-items:center;gap:4px}
+.fb{align-self:flex-end;max-width:86%;font-size:.92rem;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 12px}
+.fb.good{color:var(--muted)}
+.fb mark{background:var(--mark);color:var(--mark-ink);padding:0 3px;border-radius:3px}
+.fb .hu{color:var(--muted);margin-top:4px}
+.words{align-self:flex-start;display:flex;flex-wrap:wrap;gap:6px;max-width:92%}
+.word-pill{font-size:.82rem;border:1px dashed var(--brand);color:var(--brand);border-radius:8px;padding:3px 8px}
+.typing{color:var(--muted);font-style:italic}
+.err{color:var(--warn);font-size:.9rem;align-self:center;text-align:center}
+
+.composer{display:flex;gap:8px;align-items:flex-end;padding-block:8px;border-top:1px solid var(--line);background:var(--bg)}
+.help{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.helpbox{align-self:stretch;background:var(--surface);border:1px dashed var(--brand);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.helpbox .lbl{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.starter{text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px}
+.starter small{display:block;color:var(--muted)}
+.clar{display:inline-block;margin-top:4px;font-size:.75rem;opacity:.9}
+.pack-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pack-row select{flex:1 1 180px;min-width:0}
+.composer textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:20px;padding:10px 14px;font:inherit;max-height:120px}
+.round{flex:0 0 auto;width:44px;height:44px;border-radius:50%;border:0;display:grid;place-items:center}
+.round svg{width:22px;height:22px}
+.send{background:var(--brand);color:var(--brand-ink)}
+.mic{background:var(--surface);border:1px solid var(--line)}
+.mic.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+.round:disabled{opacity:.45}
+.hint{font-size:.8rem;color:var(--muted);padding-block:0 6px}
+
+/* vocab */
+h2{font-family:var(--display);font-weight:600;font-size:1.2rem;margin:8px 0 6px}
+.muted{color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 18px;text-align:center;min-height:180px;display:flex;flex-direction:column;justify-content:center;gap:8px}
+.card .en{font-family:var(--display);font-weight:800;font-size:1.7rem}
+.card .hu{font-size:1.15rem}
+.card .ex{color:var(--muted);font-style:italic}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 14px;flex:1;font-weight:700}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.vlist{list-style:none;padding:0;margin:0;display:flex;flex-direction:column}
+.vlist li{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line)}
+.vlist .w{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.vlist .m{color:var(--muted);flex:1;min-width:0;overflow-wrap:anywhere}
+.lvl{font-size:.75rem;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.del{background:none;border:0;color:var(--muted);padding:0 4px}
+
+/* settings */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.field label{font-weight:700}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+select,input[type=range]{font:inherit}
+select{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:9px}
+.toggle{display:flex;align-items:center;gap:10px}
+.note{font-size:.88rem;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+/* reading */
+.reading{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 16px 12px}
+.reading h3{font-family:var(--display);font-weight:600;font-size:1.15rem;margin:0 0 8px;text-wrap:balance}
+.reading p{margin:0 0 10px;max-width:65ch}
+.q{margin-top:16px}
+.q .qt{font-weight:700;margin-bottom:6px}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opt{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 12px}
+.opt.right{border-color:var(--brand);background:var(--tutor);font-weight:700}
+.opt.wrong{border-color:var(--warn);color:var(--warn)}
+.q .why{font-size:.9rem;color:var(--muted);margin-top:6px}
+.score{font-family:var(--display);font-weight:600;margin-top:16px}
+nav.tabs button{font-size:.75rem}
+/* car mode */
+.car-now{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:26px 18px;text-align:center;display:flex;flex-direction:column;gap:10px;min-height:220px;justify-content:center}
+.car-now .stage{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.car-now .hu{font-size:1.3rem}
+.car-now .en{font-family:var(--display);font-weight:800;font-size:2rem;line-height:1.15;overflow-wrap:anywhere}
+.car-now .count{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.car-ctrl{display:flex;gap:12px;justify-content:center;align-items:center;margin-top:14px}
+.car-ctrl .round{width:64px;height:64px;background:var(--surface);border:1px solid var(--line)}
+.car-ctrl .play{width:92px;height:92px;background:var(--brand);color:var(--brand-ink);border:0}
+.car-ctrl svg{width:30px;height:30px}
+.car-ctrl .play svg{width:40px;height:40px}
+/* desktop: side navigation, wider content, wrapped topic chips */
+@media (min-width:900px){
+  .app{max-width:1120px;display:grid;grid-template-columns:210px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"nav header" "nav main" "nav composer"}
+  .app>header{grid-area:header}
+  .app>main{grid-area:main}
+  #composer-wrap{grid-area:composer}
+  nav.tabs{grid-area:nav;flex-direction:column;justify-content:flex-start;gap:4px;border-top:0;border-right:1px solid var(--line);padding:72px 10px 16px}
+  nav.tabs button{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:12px;padding:11px 14px;border-radius:12px;font-size:.95rem}
+  nav.tabs button[aria-selected="true"]{background:var(--tutor)}
+  .scen{flex-wrap:wrap;overflow:visible}
+  .view{max-width:820px}
+  .msg,.fb{max-width:70%}
+  .card{min-height:220px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="pad">
+    <h1>Beszélj <span>Angolul</span></h1>
+    <div class="streak" id="streak">🔥 0 nap</div>
+  </header>
+
+  <main id="main">
+    <!-- CHAT -->
+    <section class="view pad" id="v-chat">
+      <div class="scen" id="scen" role="group" aria-label="Téma"></div>
+      <div class="chat" id="chat" aria-live="polite"></div>
+    </section>
+
+    <!-- VOCAB -->
+    <section class="view pad" id="v-vocab" hidden>
+      <h2>Szókártyák</h2>
+      <p class="muted" id="vocab-sub">A beszélgetésekből gyűjtött szavaid.</p>
+      <div class="pack-row">
+        <select id="pack-topic" aria-label="Szócsomag témája">
+          <option value="arch:building structures (foundations, walls, slabs, beams, columns, roofs)">Építész: szerkezetek</option>
+          <option value="arch:building materials and finishes (concrete, timber, glazing, insulation, cladding)">Építész: anyagok, burkolatok</option>
+          <option value="arch:building services / MEP (HVAC, plumbing, electrical, ventilation, energy)">Építész: épületgépészet</option>
+          <option value="arch:design and drawings (floor plan, section, elevation, scale, revision, render)">Építész: tervezés, rajzok</option>
+          <option value="arch:contracts, fees and costs (tender, variation, invoice, retention, liability)">Építész: szerződés, költség</option>
+          <option value="arch:construction site and schedule (site meeting, defects, handover, delays, snagging)">Építész: építkezés, ütemterv</option>
+          <option value="arch:planning and regulations (building permit, zoning, fire safety, accessibility)">Építész: engedélyezés, előírások</option>
+          <option value="idiom:common everyday English idioms and phrasal verbs">Szólások: hétköznapi</option>
+          <option value="idiom:English idioms and fixed phrases used in business meetings and negotiations">Szólások: üzleti, tárgyalás</option>
+        </select>
+        <button class="btn primary" id="pack-gen" style="flex:0 0 auto">10 új szó</button>
+      </div>
+      <div id="flash"></div>
+      <h2 style="margin-top:22px">Összes szó</h2>
+      <ul class="vlist" id="vlist"></ul>
+    </section>
+
+    <!-- LEVEL TEST -->
+    <section class="view pad" id="v-test" hidden>
+      <h2>Szintfelmérő</h2>
+      <p class="muted">12 rövid kérdés, könnyűtől a nehézig. Ne keresd ki a választ, mert akkor nem a valódi szintedet kapod. Ha nem tudod, válaszd a „Nem tudom” lehetőséget.</p>
+      <div id="test-out"></div>
+    </section>
+
+    <!-- READING -->
+    <section class="view pad" id="v-read" hidden>
+      <h2>Szövegértés</h2>
+      <p class="muted">Rövid szakmai szövegek a szintedhez igazítva, ellenőrző kérdésekkel és szószedettel.</p>
+      <div class="field">
+        <label for="read-type">Szöveg típusa</label>
+        <select id="read-type">
+          <option value="a client's email to their architect about changes they want in the design">Ügyfél e-mailje</option>
+          <option value="an excerpt from an architectural technical specification (materials, finishes, building elements)">Műszaki leírás</option>
+          <option value="a weekly construction site progress report from the site manager">Építési jelentés</option>
+          <option value="an excerpt from an architect's services agreement (scope, fees, payment stages, liability)">Szerződésrészlet</option>
+          <option value="a short article from an architecture magazine about a recent building or a sustainable design trend">Szakcikk</option>
+          <option value="minutes of a design coordination meeting between the architect and engineers">Egyeztetés jegyzőkönyve</option>
+          <option value="a short everyday text such as a news story or a blog post">Hétköznapi szöveg</option>
+        </select>
+      </div>
+      <div class="row" style="margin-bottom:14px"><button class="btn primary" id="read-gen">Új szöveg</button></div>
+      <div id="read-out"></div>
+    </section>
+
+    <!-- CAR -->
+    <section class="view pad" id="v-car" hidden>
+      <h2>Autós mód</h2>
+      <p class="muted">Hallgasd kihangosítva. Emma magyarul mondja a kifejezést, a szünetben mondd ki hangosan angolul, aztán meghallod a helyes angol változatot kétszer. Nem kell hozzányúlnod, körbe-körbe megy.</p>
+      <div class="field">
+        <label for="car-src">Mit hallgassunk?</label>
+        <select id="car-src"></select>
+      </div>
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn" id="car-gen">Új kifejezések ehhez a témához</button>
+      </div>
+      <div class="field">
+        <label for="car-pause">Gondolkodási idő</label>
+        <select id="car-pause"><option value="3">3 mp</option><option value="5">5 mp</option><option value="8">8 mp</option></select>
+      </div>
+      <div class="car-now" id="car-now"></div>
+      <div class="car-ctrl">
+        <button class="round" id="car-prev" aria-label="Előző"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button class="round play" id="car-play" aria-label="Lejátszás"></button>
+        <button class="round" id="car-next" aria-label="Következő"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <p class="note" style="margin-top:18px">Indítás előtt csatlakoztasd a telefont az autóhoz Bluetooth-on, és indítsd el a lejátszást, mielőtt elindulsz. Az oldal ébren tartja a kijelzőt, mert lezárt képernyőnél a felolvasás leállhat. A magyar felolvasáshoz a telefonon kell lennie magyar hangnak (Androidon és iPhone-on általában van).</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view pad" id="v-set" hidden>
+      <h2>Beállítások</h2>
+      <div class="field">
+        <label for="provider">AI szolgáltató</label>
+        <select id="provider">
+          <option value="openai">OpenAI (ChatGPT)</option>
+          <option value="claude">Anthropic (Claude)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="apikey" id="apikey-label">API-kulcs</label>
+        <input type="password" id="apikey" autocomplete="off" placeholder="sk-..." style="font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:9px">
+        <div class="row"><button class="btn" id="apikey-save">Kulcs mentése</button><button class="btn" id="apikey-del">Kulcs törlése</button></div>
+        <span class="muted" id="apikey-state" style="font-size:.88rem"></span>
+      </div>
+      <div class="field" id="oai-model-field">
+        <label for="oai-model">AI modell (OpenAI)</label>
+        <select id="oai-model"><option value="">Előbb mentsd el a kulcsot</option></select>
+        <span class="muted" style="font-size:.88rem">Ajánlott: gpt-6.1-terra (gyors, jó minőség, napi 20 üzenetnél kb. havi 2 dollár). Legolcsóbb: gpt-6-luna (egyszerűbb javítások).</span>
+      </div>
+      <div class="field" id="claude-model-field">
+        <label for="model">AI modell (Claude)</label>
+        <select id="model">
+          <option value="claude-opus-5-5">Claude Opus 5.5 – a legjobb minőség, drágább</option>
+          <option value="claude-sonnet-5-5">Claude Sonnet 5.5 – jó minőség, közepes ár</option>
+          <option value="claude-haiku-5-5">Claude Haiku 5.5 – a legolcsóbb, egyszerűbb</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="level">Szinted</label>
+        <select id="level">
+          <option value="A1">A1 – Kezdő</option>
+          <option value="A2">A2 – Alapfok</option>
+          <option value="B1">B1 – Középfok alatt</option>
+          <option value="B2">B2 – Középfok</option>
+          <option value="C1">C1 – Haladó</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="accent">Kiejtés (felolvasás)</label>
+        <select id="accent">
+          <option value="en-US">Amerikai</option>
+          <option value="en-GB">Brit</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="rate">Felolvasás sebessége: <span id="rate-v">0.9</span>×</label>
+        <input type="range" id="rate" min="0.6" max="1.2" step="0.05" value="0.9">
+      </div>
+      <div class="field">
+        <div class="toggle"><input type="checkbox" id="autoread"><label for="autoread">Tanár válaszainak automatikus felolvasása</label></div>
+      </div>
+      <div class="field">
+        <div class="toggle"><input type="checkbox" id="voicemode"><label for="voicemode">Folyamatos hangos beszélgetés (Emma felolvas, utána magától hallgat, és amit mondasz, el is küldi)</label></div>
+      </div>
+      <div class="field">
+        <div class="toggle"><input type="checkbox" id="strict"><label for="strict">Apró hibákat is javítson</label></div>
+      </div>
+      <div class="field">
+        <button class="btn" id="open-test">Szintfelmérő teszt</button>
+      </div>
+      <div class="field">
+        <button class="btn" id="reset-chat">Beszélgetés újrakezdése</button>
+      </div>
+      <p class="note"><b>Beszéd:</b> koppints a mikrofon gombra, és mondd angolul. Az első alkalommal a böngésző engedélyt kér a mikrofonhoz. A beszédfelismerés Chrome-ban működik a legjobban.</p>
+      <div class="field" style="margin-top:16px">
+        <label>Mentés és áthelyezés</label>
+        <div class="row"><button class="btn" id="export">Előrehaladás másolása</button><button class="btn" id="import">Beillesztés</button></div>
+        <textarea id="io" rows="3" hidden style="font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px;margin-top:6px"></textarea>
+      </div>
+      <p class="note" id="store-note">Az előrehaladásod mentése…</p>
+    </section>
+  </main>
+
+  <div id="composer-wrap">
+    <div class="composer pad" id="composer">
+      <button class="round mic" id="mic" aria-label="Beszéd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <textarea id="input" rows="1" placeholder="Írj angolul, vagy kérdezz magyarul…" aria-label="Üzenet"></textarea>
+      <button class="round help" id="help" aria-label="Segíts" title="Segíts, elakadtam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg></button>
+      <button class="round send" id="send" aria-label="Küldés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-v="chat" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H9l-5 4z"/></svg>Beszélgetés</button>
+    <button role="tab" data-v="vocab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="14" height="13" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v11"/></svg>Szavaim</button>
+    <button role="tab" data-v="read" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3zM21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/></svg>Olvasás</button>
+    <button role="tab" data-v="car" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 15v-3l2-5h14l2 5v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM3 12h18"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>Autó</button>
+    <button role="tab" data-v="set" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Beállítások</button>
+  </nav>
+</div>
+
+<script>
+const SCENARIOS = [
+  {id:"free", hu:"Szabad beszélgetés", en:"a friendly free conversation about the learner's life, hobbies and day"},
+  {id:"arch-client", hu:"Építész: Ügyféltárgyalás", pro:true, en:"an architect's first meeting with a client about their brief, budget, schedule and wishes for a new house or building (you are the client)"},
+  {id:"arch-fee", hu:"Építész: Díjtárgyalás", pro:true, nego:true, en:"negotiating the architect's design fee, scope of services, payment stages and contract terms with a client who wants a lower price (you are the client; push back politely and make counter-offers)"},
+  {id:"arch-contractor", hu:"Építész: Kivitelezői alku", pro:true, nego:true, en:"negotiating with a building contractor about their tender price, extra costs for design changes, deadlines and penalties (you are the contractor; defend your price and ask for concessions)"},
+  {id:"arch-present", hu:"Építész: Tervbemutatás", pro:true, en:"the architect presenting a design concept to the client (you are the client asking about layout, floor plans, materials, daylight, energy efficiency and cost)"},
+  {id:"arch-site", hu:"Építész: Helyszíni bejárás", pro:true, en:"a construction site visit with the site manager discussing progress, defects, delays and the schedule (you are the site manager)"},
+  {id:"arch-team", hu:"Építész: Tervezői egyeztetés", pro:true, en:"a design coordination meeting with structural and MEP engineers about drawings, clashes, revisions and deadlines (you are the structural engineer)"},
+  {id:"arch-permit", hu:"Építész: Engedélyezés", pro:true, en:"talking with a planning officer about the building permit, zoning rules, fire safety and accessibility requirements (you are the planning officer)"},
+  {id:"smalltalk", hu:"Ismerkedés", en:"meeting someone new at a party and making small talk"},
+  {id:"cafe", hu:"Kávézó, étterem", en:"ordering food and drinks in a café or restaurant (you are the waiter)"},
+  {id:"travel", hu:"Utazás, reptér", en:"travelling: airport check-in, hotel reception and asking for directions (you play the staff)"},
+  {id:"job", hu:"Állásinterjú", en:"a job interview in English (you are the interviewer; ask about experience and strengths)"},
+  {id:"work", hu:"Munkahely", en:"everyday workplace English: meetings, emails, talking with colleagues"},
+  {id:"doctor", hu:"Orvosnál", en:"a visit to the doctor or pharmacy abroad (you are the doctor)"},
+  {id:"shop", hu:"Vásárlás", en:"shopping for clothes or groceries, asking prices and sizes (you are the shop assistant)"},
+];
+const LEVEL_DESC = {
+  A1:"absolute beginner: very short, simple sentences, the most common 500 words, present tense",
+  A2:"elementary: short simple sentences, common everyday vocabulary",
+  B1:"intermediate: natural but clear sentences, everyday vocabulary, avoid rare idioms",
+  B2:"upper-intermediate: natural conversational English with some idioms",
+  C1:"advanced: fully natural English, idioms and nuanced vocabulary welcome",
+};
+
+/* ---------- state ---------- */
+const defaultState = () => ({
+  settings:{level:"A2", accent:"en-US", rate:0.9, autoread:true, strict:false, scenario:"free", model:"claude-opus-5-5", voicemode:false},
+  chats:{}, // scenario -> [{role, content, fb?, words?}]
+  vocab:[], // {en, hu, example, box, due, added}
+  days:[],  // ISO dates practiced
+});
+let S = defaultState();
+let store = null; // {save(obj)}
+const $ = id => document.getElementById(id);
+
+function lsGet(){ try{ return JSON.parse(localStorage.getItem("bsz-state")||"null"); }catch(e){ return null; } }
+function lsSet(o){ try{ localStorage.setItem("bsz-state", JSON.stringify(o)); }catch(e){} }
+function merge(o){ const d=defaultState(); if(!o) return d; return {...d, ...o, settings:{...d.settings, ...(o.settings||{})}}; }
+
+let saveTimer=null;
+function save(){
+  lsSet(S);
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{ if(store) store.save(S).catch(()=>{}); }, 1200);
+}
+function trimForSave(){
+  for(const k in S.chats){ if(S.chats[k].length>40) S.chats[k]=S.chats[k].slice(-40); }
+}
+
+async function initStore(){
+  S = merge(lsGet());
+  renderAll();
+  $("store-note").textContent = "Az előrehaladásod ezen a telefonon, ebben a böngészőben van mentve. Másik eszközre a Mentés és áthelyezés gombokkal viheted át.";
+  return;
+  try{
+    const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+    const id = user ? await user.id() : null;
+    if(db && id){
+      const ref = db.collection("data/users/"+id).doc("main");
+      const snap = await ref.get();
+      if(snap.exists){ S = merge(snap.data()); lsSet(S); renderAll(); }
+      store = { save: o => { trimForSave(); return ref.set(JSON.parse(JSON.stringify(o))); } };
+      $("store-note").textContent = "Az előrehaladásod a Claude-fiókodhoz mentve, így bármelyik eszközön megvan.";
+      if(!snap.exists) store.save(S).catch(()=>{});
+      return;
+    }
+  }catch(e){}
+  $("store-note").textContent = "Az előrehaladásod ebben a böngészőben van mentve.";
+}
+
+/* ---------- Claude ---------- */
+const SDK_URL = "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.135.0/+esm";
+const KEY_LS = "bsz-apikey", OAI_KEY_LS = "bsz-apikey-openai";
+const provider = () => S.settings.provider || "openai";
+function keyName(){ return provider()==="openai" ? OAI_KEY_LS : KEY_LS; }
+function getKey(){ try{ return localStorage.getItem(keyName()) || ""; }catch(e){ return ""; } }
+// a non-Claude key saved earlier in the Claude slot moves to the OpenAI slot
+try{ const old = localStorage.getItem(KEY_LS); if(old && !/^sk-ant-/.test(old)){ if(!localStorage.getItem(OAI_KEY_LS)) localStorage.setItem(OAI_KEY_LS, old); localStorage.removeItem(KEY_LS); } }catch(e){}
+
+/* ---------- OpenAI ---------- */
+function oaiError(status, m){
+  m = String(m||"");
+  let code = "upstream_error";
+  if(status===401 || status===403) code = "auth";
+  else if(status===429 && /quota|billing/i.test(m)) code = "credit";
+  else if(status===429) code = "rate_limited";
+  else if(status===404) code = "model";
+  else if(status===400) code = "invalid_request";
+  else if(status>=500) code = "overloaded";
+  return {code, message:(status+" "+m).slice(0,200)};
+}
+let oaiModels = null;
+async function loadOaiModels(force){
+  const key = (()=>{ try{ return localStorage.getItem(OAI_KEY_LS)||""; }catch(e){ return ""; } })();
+  const sel = $("oai-model");
+  if(!key){ sel.innerHTML = `<option value="">Előbb mentsd el a kulcsot</option>`; return; }
+  if(oaiModels && !force){ fillOai(); return; }
+  sel.innerHTML = `<option value="">Modellek betöltése…</option>`;
+  try{
+    const r = await fetch("https://api.openai.com/v1/models", {headers:{"Authorization":"Bearer "+key}});
+    if(!r.ok){ let m=""; try{ m=(await r.json()).error.message; }catch(_){} throw oaiError(r.status, m); }
+    const j = await r.json();
+    const skip = /(audio|realtime|tts|transcri|image|embed|search|instruct|codex|moderation|dall|whisper|davinci|babbage|preview-\d{4}|computer)/i;
+    oaiModels = (j.data||[]).filter(m=>/^(gpt-|o\d|chatgpt)/i.test(m.id) && !skip.test(m.id)).sort((a,b)=>(b.created||0)-(a.created||0)).map(m=>m.id);
+    if(!oaiModels.length) throw {code:"model", message:"Nincs elérhető csevegő modell ehhez a kulcshoz."};
+    fillOai();
+  }catch(e){
+    oaiModels = null;
+    sel.innerHTML = `<option value="">Nem sikerült: ${esc(e.code==="auth" ? "a kulcs nem érvényes" : (e.message||"hálózati hiba"))}</option>`;
+  }
+}
+function fillOai(){
+  const sel = $("oai-model");
+  let cur = S.settings.oaiModel;
+  if(!cur || !oaiModels.includes(cur)){
+    cur = oaiModels.find(id=>/^gpt-[\d.]+-terra$/.test(id)) || oaiModels.find(id=>/^gpt-[\d.]+-sol$/.test(id)) || oaiModels.find(id=>/^gpt-[\d.]+-mini$/.test(id)) || oaiModels[0];
+    S.settings.oaiModel = cur; save();
+  }
+  sel.innerHTML = oaiModels.map(id=>`<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  sel.value = cur;
+}
+async function oaiCall(key, model, messages, onText, stream){
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method:"POST",
+    headers:{"Content-Type":"application/json", "Authorization":"Bearer "+key},
+    body: JSON.stringify({model, messages, stream, max_completion_tokens:4000})
+  });
+  if(!res.ok){ let m=""; try{ m=(await res.json()).error.message; }catch(_){} throw oaiError(res.status, m); }
+  if(!stream){ const j = await res.json(); const t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || ""; if(onText && t) onText({text:t}); return t; }
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", text = "";
+  for(;;){
+    const {done, value} = await reader.read(); if(done) break;
+    buf += dec.decode(value, {stream:true});
+    let i;
+    while((i = buf.indexOf("\n")) >= 0){
+      const line = buf.slice(0,i).trim(); buf = buf.slice(i+1);
+      if(!line.startsWith("data:")) continue;
+      const d = line.slice(5).trim(); if(d==="[DONE]") continue;
+      try{ const j = JSON.parse(d); const delta = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content; if(delta){ text += delta; if(onText) onText({text}); } }catch(_){}
+    }
+  }
+  return text;
+}
+function makeOaiRun(key){
+  const run = async (input, opts={}) => {
+    const messages = typeof input==="string" ? [{role:"user", content:input}] : input;
+    const model = S.settings.oaiModel;
+    if(!model) throw {code:"model", message:"Válassz modellt a Beállításokban."};
+    let text;
+    try{ text = await oaiCall(key, model, messages, opts.onText, true); }
+    catch(e){
+      if(!e || !e.code){ throw {code:"network", message:String((e && e.message)||"")}; }
+      if(e.code==="invalid_request" && /stream/i.test(e.message)) text = await oaiCall(key, model, messages, opts.onText, false);
+      else throw e;
+    }
+    if(!text) throw {code:"empty_completion", message:""};
+    return {text};
+  };
+  run.json = async (input, opts) => {
+    const {text} = await run(input + "\n\nReturn only the JSON value, with no code fence and no other text.", opts);
+    const a = text.search(/[\[{]/), b = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+    try{ return JSON.parse(text.slice(a, b+1)); }catch(e){ throw {code:"invalid_json", message:"A válasz nem volt érvényes JSON."}; }
+  };
+  return run;
+}
+let samplePromise = null;
+function apiError(e){
+  const st = e && e.status; const m = String((e && e.message) || "");
+  let code = "upstream_error";
+  if(st===401 || st===403) code = "auth";
+  else if(st===429) code = "rate_limited";
+  else if(st===400 && /credit|balance/i.test(m)) code = "credit";
+  else if(st===400) code = "invalid_request";
+  else if(st===529 || (st>=500)) code = "overloaded";
+  else if(!st && /fetch|network|connection/i.test(m)) code = "network";
+  return {code, message: m.slice(0,200)};
+}
+function getSample(){
+  if(samplePromise) return samplePromise;
+  const key = getKey();
+  if(!key) return Promise.resolve(null);
+  if(provider()==="openai"){ samplePromise = Promise.resolve(makeOaiRun(key)); return samplePromise; }
+  samplePromise = import(SDK_URL).then(mod=>{
+    const Anthropic = mod.default || mod.Anthropic;
+    const client = new Anthropic({apiKey:key, dangerouslyAllowBrowser:true});
+    const run = async (input, opts={}) => {
+      const messages = typeof input==="string" ? [{role:"user", content:input}] : input;
+      const model = S.settings.model || "claude-opus-5-5";
+      const params = {model, max_tokens:4000, output_config:{effort:"low"}, messages};
+      let stream;
+      try{
+        if(model.startsWith("claude-opus")){
+          stream = client.beta.messages.stream({...params, betas:["server-side-fallback-2026-07-01"], fallbacks:"default"});
+        }else{
+          stream = client.messages.stream(params);
+        }
+        if(opts.onText) stream.on("text", (_d, snap)=>{ try{ opts.onText({text:snap}); }catch(_){} });
+        let msg;
+        try{ msg = await stream.finalMessage(); }
+        catch(e1){
+          // if the account does not accept the fallback option, retry once as a plain request
+          if(!(e1 && e1.status===400 && model.startsWith("claude-opus") && /fallback|beta/i.test(String(e1.message||"")))) throw e1;
+          stream = client.messages.stream(params);
+          if(opts.onText) stream.on("text", (_d, snap)=>{ try{ opts.onText({text:snap}); }catch(_){} });
+          msg = await stream.finalMessage();
+        }
+        if(msg.stop_reason==="refusal") throw {code:"refused", message:"refusal"};
+        const text = msg.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+        if(!text) throw {code:"empty_completion", message:""};
+        return {text};
+      }catch(e){ if(e && e.code && !e.status) throw e; throw apiError(e); }
+    };
+    run.json = async (input, opts) => {
+      const {text} = await run(input + "\n\nReturn only the JSON value, with no code fence and no other text.", opts);
+      const a = text.search(/[\[{]/), b = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+      try{ return JSON.parse(text.slice(a, b+1)); }catch(e){ throw {code:"invalid_json", message:"A válasz nem volt érvényes JSON."}; }
+    };
+    return run;
+  }).catch(e=>{ samplePromise = null; throw (e && e.code) ? e : {code:"network", message:"Nem sikerült betölteni az AI könyvtárat. Van internet?"}; });
+  return samplePromise;
+}
+function renderKeyState(){
+  const k = getKey(); const oai = provider()==="openai";
+  $("apikey-label").textContent = oai ? "OpenAI API-kulcs" : "Claude API-kulcs";
+  $("apikey").placeholder = oai ? "sk-..." : "sk-ant-...";
+  $("oai-model-field").hidden = !oai; $("claude-model-field").hidden = oai;
+  $("apikey-state").textContent = k ? `Kulcs elmentve (…${k.slice(-4)}). Csak ezen az eszközön tárolódik.` : (oai ? "Még nincs kulcs. A platform.openai.com → API keys oldalon tudsz létrehozni." : "Még nincs kulcs. A console.anthropic.com oldalon tudsz létrehozni.");
+  if(oai) loadOaiModels(false);
+}
+
+function instructions(){
+  const sc = SCENARIOS.find(s=>s.id===S.settings.scenario)||SCENARIOS[0];
+  const lv = S.settings.level;
+  return `You are Emma, a warm, encouraging English conversation tutor for a Hungarian native speaker.
+Learner level: ${lv} (${LEVEL_DESC[lv]}). Adapt your vocabulary and sentence length to this level.
+The learner works as an architect.
+Scenario: ${sc.en}. Stay in this scenario and keep the conversation moving.${sc.pro ? "\nThis is professional English practice: use realistic architecture and construction terminology (adapted to the learner's level), and prefer professional terms in the words list." : ""}${sc.nego ? "\nThis is a negotiation: be a realistic, firm but polite counterpart. Do not give in too easily; make the learner justify their position, propose compromises and close the deal. In the correction explanation, also point out when a phrase sounds too direct or too weak for a negotiation and suggest a more diplomatic or more confident wording." : ""}
+
+Rules for your spoken reply:
+- Reply in English only, 1-3 short sentences, like a real spoken conversation.
+- Always end with a question or prompt so the learner keeps talking.
+- Do not correct mistakes inside the reply; corrections go in the feedback part.
+- The learner may write in Hungarian. If it is a question to you as a teacher (for example what a word means, how to say something in English, or a grammar question), answer it in Hungarian in "answer_hu" (max 3 short sentences, with English examples), and in REPLY continue the conversation in English. If it is an ordinary conversation message written in Hungarian, reply in simple English and put the English version in "correction".
+
+Output format, exactly:
+REPLY: <your English reply>
+@@@
+{"answer_hu": null or "<Hungarian answer to the learner's Hungarian question>", "correction": null or {"original": "<learner's sentence>", "corrected": "<natural, correct English version>", "explanation_hu": "<short explanation in Hungarian, max 2 sentences>"}, "words": [{"en": "<useful word or phrase from YOUR reply>", "hu": "<Hungarian meaning>", "example": "<short English example>"}]}
+
+Feedback rules:
+- "correction": ${S.settings.strict ? "correct every grammar, word-choice or spelling mistake, even small ones" : "correct real grammar or word-choice mistakes; ignore missing punctuation, capitalisation and tiny typos"}. If the sentence is fine, use null. If the learner wrote Hungarian, put the English translation in "corrected".
+- "words": 0-2 items useful at ${lv} level that appeared in your reply. Use [] if nothing new.
+- The JSON must be valid. No text after the JSON.`;
+}
+
+function buildInput(history){
+  // history: [{role,content}] beginning with assistant opener
+  let h = history.slice(-16);
+  const msgs = [{role:"user", content: instructions() + "\n\nStart the conversation now with a short greeting and an opening question."}];
+  if(h.length && h[0].role==="user") msgs.push({role:"assistant", content:"REPLY: Hi, I'm Emma! How are you today?"});
+  h.forEach((m,i)=>{
+    const last = i===h.length-1;
+    msgs.push({role:m.role, content: (m.role==="user" && last) ? `Learner${m.spoken ? " (spoken, transcribed by speech recognition)" : ""}: ${m.content}\n\n(${m.spoken ? "This message was spoken aloud. Ignore missing punctuation and capitalisation. If a word looks misrecognised in a way that suggests a pronunciation problem, mention it briefly in explanation_hu with a tip on how to pronounce it. " : ""}Answer in the exact REPLY / @@@ / JSON format.)` : m.content});
+  });
+  return msgs;
+}
+
+function splitOut(text){
+  text = String(text||"");
+  const i = text.indexOf("@@@");
+  let reply = (i>=0 ? text.slice(0,i) : text).replace(/^\s*REPLY:\s*/i,"").trim();
+  let fb = null;
+  if(i>=0){
+    const raw = text.slice(i+3); const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
+    if(a>=0 && b>a){ try{ fb = JSON.parse(raw.slice(a,b+1)); }catch(e){} }
+  }
+  return {reply, fb};
+}
+
+/* ---------- chat ---------- */
+let busy = false, ctrl = null;
+const chatOf = () => (S.chats[S.settings.scenario] ||= []);
+
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function renderScen(){
+  $("scen").innerHTML = SCENARIOS.map(s=>`<button class="chip" data-s="${s.id}" aria-pressed="${s.id===S.settings.scenario}">${esc(s.hu)}</button>`).join("");
+}
+function renderChat(){
+  const box = $("chat"); box.innerHTML = "";
+  const c = chatOf();
+  if(!c.length){
+    const p = document.createElement("div"); p.className="msg tutor";
+    p.innerHTML = `Szia! Én Emma vagyok, az angoltanárod. Válassz fent egy témát, és nyomd meg a gombot, hogy elkezdjük. Írhatsz vagy beszélhetsz is, a hibáidat pedig minden üzenet után kijavítom.<div class="tools"><button class="btn primary" id="start" style="flex:0 0 auto">Kezdjük!</button>${S.levelTested ? "" : `<button class="btn" id="start-test" style="flex:0 0 auto">Előbb felmérem a szintem</button>`}</div>`;
+    box.appendChild(p);
+    $("start").onclick = () => ask();
+    const st = $("start-test"); if(st) st.onclick = () => show("test");
+    return;
+  }
+  c.forEach((m,idx)=>{
+    if(m.role==="user"){
+      box.insertAdjacentHTML("beforeend", `<div class="msg me">${esc(m.content)}${m.clarity ? `<br><span class="clar">🎙 Érthetőség: ${m.clarity}% · ${clarityLabel(m.clarity)}</span>` : ""}</div>`);
+      if(m.answer) box.insertAdjacentHTML("beforeend", `<div class="fb" style="align-self:flex-start"><b>Emma magyarul:</b> ${esc(m.answer)}</div>`);
+      if(m.fb!==undefined && !(m.answer && m.fb===null)) box.insertAdjacentHTML("beforeend", fbHtml(m.fb));
+    }else{
+      box.insertAdjacentHTML("beforeend", `<div class="msg tutor">${esc(m.content)}<div class="tools"><button class="icon-btn" data-say="${idx}">🔊 Meghallgatom</button><button class="icon-btn" data-tr="${idx}">Fordítás</button></div><div class="hu-tr muted" id="tr-${idx}" hidden></div></div>`);
+      if(m.words && m.words.length) box.insertAdjacentHTML("beforeend", `<div class="words">${m.words.map(w=>`<span class="word-pill">+ ${esc(w.en)} = ${esc(w.hu)}</span>`).join("")}</div>`);
+    }
+  });
+  scrollDown();
+}
+function fbHtml(fb){
+  if(fb===null) return `<div class="fb good">✓ Szép mondat, nincs mit javítani.</div>`;
+  if(fb==="err") return "";
+  return `<div class="fb">Így természetesebb: <mark>${esc(fb.corrected)}</mark>${fb.explanation_hu?`<div class="hu">${esc(fb.explanation_hu)}</div>`:""}</div>`;
+}
+function scrollDown(){ const m=$("main"); requestAnimationFrame(()=>{ m.scrollTop = m.scrollHeight; }); }
+
+async function ask(){
+  if(busy) return;
+  let sample = null;
+  try{ sample = await getSample(); }catch(e){ $("chat").insertAdjacentHTML("beforeend", `<div class="err">${esc(e.message||"Nem sikerült elindítani az AI-t.")}</div>`); scrollDown(); return; }
+  const box = $("chat");
+  if(!sample){
+    box.insertAdjacentHTML("beforeend", `<div class="err">Előbb add meg a Claude API-kulcsodat a Beállításokban.</div>`);
+    scrollDown(); return;
+  }
+  busy = true; setBusy();
+  const c = chatOf();
+  if(!c.length) box.innerHTML = "";
+  const bubble = document.createElement("div"); bubble.className="msg tutor typing"; bubble.textContent="Emma gépel…";
+  box.appendChild(bubble); scrollDown();
+  const asText = v => typeof v==="string" ? v : (v && typeof v.text==="string") ? v.text : "";
+  try{
+    const res = await sample(buildInput(c.map(m=>({role:m.role, content:String(m.content||""), spoken:!!m.spoken}))), {
+      cache:false,
+      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r){ bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); } }catch(_){} }
+    });
+    const text = asText(res);
+    const {reply, fb} = splitOut(text);
+    const lastUser = c[c.length-1];
+    if(lastUser && lastUser.role==="user"){
+      lastUser.fb = fb ? ((fb.correction && fb.correction.corrected) ? fb.correction : null) : "err";
+      if(fb && fb.answer_hu) lastUser.answer = String(fb.answer_hu);
+    }
+    const words = (fb && Array.isArray(fb.words)) ? fb.words.filter(w=>w&&w.en&&w.hu).slice(0,2).map(w=>({en:String(w.en), hu:String(w.hu), example:String(w.example||"")})) : [];
+    c.push({role:"assistant", content: reply || "Sorry, could you say that again?", words});
+    addWords(words);
+    markDay();
+    save();
+    renderChat();
+    if(S.settings.voicemode){ speakP(reply, S.settings.accent, S.settings.rate).then(()=>{ if(S.settings.voicemode && !$("v-chat").hidden) startListening(true); }); }
+    else if(S.settings.autoread) say(reply);
+  }catch(e){
+    bubble.remove();
+    const code = (e && (e.code || e.name)) || "unknown";
+    console.error("sample failed", (e && (e.code || e.name)) || "", (e && e.message) || "");
+    if(code==="cancelled" || code==="AbortError"){ return; }
+    const MSG = {
+      auth:"Az API-kulcs nem érvényes. Ellenőrizd a Beállításokban.",
+      model:"A kiválasztott modell nem érhető el. Válassz másikat a Beállításokban.",
+      credit:"Elfogyott az egyenleg az API-fiókodon. Tölts fel a szolgáltató oldalán (OpenAI: platform.openai.com → Billing).",
+      overloaded:"A szolgáltatás most túlterhelt. Próbáld újra egy perc múlva.",
+      network:"Nincs internetkapcsolat, vagy nem érhető el a szolgáltatás.",
+      not_granted:"Az oldal nem kapott engedélyt az AI használatára. Nyisd meg az oldal ⋮ menüjében az Engedélyeket, és engedélyezd.",
+      capability_disabled:"Ebben a nézetben az AI nem érhető el. Nyisd meg a linket telefonos böngészőben (Chrome) a claude.ai-on bejelentkezve.",
+      sampling_disabled:"A fiókodon most nem érhető el az AI az oldalakból.",
+      capability_removed:"Frissítsd a Claude appot, vagy nyisd meg böngészőben.",
+      session_expired:"Jelentkezz be újra a Claude-ba, aztán próbáld újra.",
+      rate_limited:"Most túl sok kérés ment el, vagy elérted a használati keretet. Várj egy kicsit, és próbáld újra.",
+      refused:"Erre most nem jött válasz. Írd át az üzenetet, és küldd újra.",
+      empty_completion:"Üres válasz jött. Próbáld újra.",
+    };
+    const msg = MSG[code] || "Nem jött válasz. Próbáld újra.";
+    const rid = "retry-"+Date.now();
+    box.insertAdjacentHTML("beforeend", `<div class="err">${esc(msg)} <button class="icon-btn" id="${rid}">Újra</button><br><small>Hibakód: ${esc(code)}${e && e.message ? " – "+esc(String(e.message).slice(0,140)) : ""}</small></div>`);
+    $(rid).onclick=e2=>{ e2.currentTarget.parentElement.remove(); ask(); };
+    scrollDown();
+    return;
+  }finally{ busy=false; ctrl=null; setBusy(); }
+}
+
+let lastSpoken = false, lastClarity = null;
+function clarityLabel(n){ return n>=90 ? "nagyon érthető" : n>=75 ? "érthető" : n>=60 ? "részben érthető" : "nehezen érthető"; }
+function send(){
+  const t = $("input").value.trim();
+  if(!t || busy) return;
+  const c = chatOf();
+  c.push({role:"user", content:t, spoken:lastSpoken, clarity: lastSpoken ? lastClarity : null});
+  lastSpoken = false; lastClarity = null;
+  $("input").value=""; autosize();
+  renderChat(); save();
+  ask();
+}
+function setBusy(){ $("send").disabled = busy; }
+
+/* translation of a tutor line */
+async function translate(idx){
+  const el = $("tr-"+idx); if(!el) return;
+  if(!el.hidden){ el.hidden = true; return; }
+  const m = chatOf()[idx]; el.hidden=false; el.textContent="Fordítás…";
+  const sample = await getSample(); if(!sample){ el.textContent="Előbb add meg az API-kulcsot a Beállításokban."; return; }
+  try{
+    const r0 = await sample(`Translate this English sentence into natural Hungarian. Output only the Hungarian translation.\n\n${m.content}`, {modelTier:"quick"});
+    const text = typeof r0==="string" ? r0 : String((r0 && r0.text) || "");
+    el.textContent = text.trim(); m.hu = text.trim(); save();
+  }catch(e){ el.textContent="Nem sikerült lefordítani."; }
+}
+
+/* ---------- speech ---------- */
+let voices = [];
+function loadVoices(){ try{ voices = speechSynthesis.getVoices(); }catch(e){} }
+if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+function say(text){
+  if(!("speechSynthesis" in window) || !text) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = S.settings.accent; u.rate = S.settings.rate;
+    const v = voices.find(v=>v.lang===S.settings.accent) || voices.find(v=>v.lang && v.lang.startsWith("en"));
+    if(v) u.voice = v;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+let rec = null, recOn = false;
+function micHint(msg){
+  try{ rec && rec.abort(); }catch(e){}
+  recOn=false; $("mic").classList.remove("on");
+  $("chat").insertAdjacentHTML("beforeend", `<div class="err">${esc(msg || "A mikrofont nem sikerült elindítani. Engedélyezd a mikrofont a böngészőben (a címsor melletti lakat ikon), vagy nyisd meg az appot Chrome-ban.")}</div>`);
+  scrollDown();
+}
+function startListening(auto){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ micHint("Ez a böngésző nem támogatja a beszédfelismerést. Nyisd meg az appot Chrome-ban."); return; }
+  if(recOn || busy) return;
+  try{
+    rec = new SR(); rec.lang = S.settings.accent; rec.interimResults = true; rec.continuous = false;
+    const base = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
+    rec.onresult = ev => {
+      let t="", cs=[];
+      for(const r of ev.results){ t += r[0].transcript; if(r.isFinal && r[0].confidence>0) cs.push(r[0].confidence); }
+      $("input").value = base + t; autosize();
+      if(cs.length) lastClarity = Math.round(100*cs.reduce((a,b)=>a+b,0)/cs.length);
+    };
+    rec.onerror = ev => {
+      if(ev.error==="not-allowed" || ev.error==="service-not-allowed") micHint();
+      else if(ev.error==="audio-capture") micHint("Nem található mikrofon.");
+      else if(ev.error==="network") micHint("A beszédfelismeréshez internet kell.");
+    };
+    rec.onend = () => {
+      recOn=false; $("mic").classList.remove("on");
+      if(!$("input").value.trim()) return;
+      lastSpoken = true;
+      if(S.settings.voicemode) send();
+    };
+    rec.start(); recOn = true; $("mic").classList.add("on");
+  }catch(e){ micHint(); }
+}
+function toggleMic(){
+  if(recOn){ try{ rec.stop(); }catch(e){} return; }
+  try{ speechSynthesis.cancel(); }catch(e){}
+  startListening(false);
+}
+
+/* ---------- vocab (simple spaced repetition) ---------- */
+const BOX_DAYS = [0,1,3,7,16,35];
+const today = () => new Date().toISOString().slice(0,10);
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function addWords(ws){
+  ws.forEach(w=>{
+    const key = w.en.trim().toLowerCase();
+    if(S.vocab.some(v=>v.en.toLowerCase()===key)) return;
+    S.vocab.push({en:w.en.trim(), hu:w.hu.trim(), example:(w.example||"").trim(), box:0, due:today(), added:today()});
+  });
+}
+let flashShown = false, flashIdx = null;
+function dueList(){ const t=today(); return S.vocab.map((v,i)=>({v,i})).filter(x=>x.v.due<=t); }
+function renderVocab(){
+  const due = dueList();
+  $("vocab-sub").textContent = S.vocab.length ? `${S.vocab.length} szó összesen, ma ${due.length} vár ismétlésre.` : "Még nincs szavad. Beszélgess Emmával, és a hasznos szavak ide kerülnek.";
+  const f = $("flash");
+  if(!S.vocab.length){ f.innerHTML = ""; }
+  else if(!due.length){ f.innerHTML = `<div class="card"><div class="en">Kész vagy mára!</div><div class="muted">Holnap újabb szavak jönnek ismétlésre.</div></div>`; }
+  else{
+    if(flashIdx===null || !due.some(x=>x.i===flashIdx)){ flashIdx = due[0].i; flashShown=false; }
+    const v = S.vocab[flashIdx];
+    f.innerHTML = `<div class="card"><div class="en">${esc(v.en)}</div>
+      ${flashShown ? `<div class="hu">${esc(v.hu)}</div>${v.example?`<div class="ex">${esc(v.example)}</div>`:""}` : `<div class="muted">Mit jelent?</div>`}
+      <div><button class="icon-btn" id="fsay">🔊 Kiejtés</button></div></div>
+      <div class="row" style="margin-top:10px">${flashShown
+        ? `<button class="btn" id="fno">Még gyakorlom</button><button class="btn primary" id="fyes">Tudtam</button>`
+        : `<button class="btn primary" id="fshow">Mutasd</button>`}</div>`;
+    $("fsay").onclick=()=>say(v.en);
+    if(flashShown){
+      $("fyes").onclick=()=>grade(true); $("fno").onclick=()=>grade(false);
+    } else $("fshow").onclick=()=>{ flashShown=true; renderVocab(); };
+  }
+  $("vlist").innerHTML = S.vocab.slice().reverse().map((v)=>{
+    const i = S.vocab.indexOf(v);
+    return `<li><span class="w">${esc(v.en)}</span><span class="m">${esc(v.hu)}</span><span class="lvl">${"●".repeat(v.box)}${"○".repeat(5-v.box)}</span><button class="del" data-del="${i}" aria-label="Törlés">✕</button></li>`;
+  }).join("");
+}
+function grade(ok){
+  const v = S.vocab[flashIdx];
+  v.box = ok ? Math.min(5, v.box+1) : 0;
+  v.due = ok ? addDays(BOX_DAYS[v.box]) : today();
+  if(!ok){ // move to the back of today's queue
+    S.vocab.splice(flashIdx,1); S.vocab.push(v);
+  }
+  flashIdx=null; flashShown=false; markDay(); save(); renderVocab();
+}
+
+/* ---------- streak ---------- */
+function markDay(){ const t=today(); if(!S.days.includes(t)){ S.days.push(t); S.days=S.days.slice(-400); } renderStreak(); }
+function renderStreak(){
+  const set = new Set(S.days); let n=0; const d=new Date();
+  if(!set.has(today())) d.setDate(d.getDate()-1);
+  while(set.has(d.toISOString().slice(0,10))){ n++; d.setDate(d.getDate()-1); }
+  $("streak").textContent = `🔥 ${n} nap`;
+}
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  const s=S.settings;
+  $("level").value=s.level; $("accent").value=s.accent; $("rate").value=s.rate; $("rate-v").textContent=(+s.rate).toFixed(2);
+  $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); renderKeyState();
+}
+["level","accent"].forEach(id=>$(id).onchange=e=>{ S.settings[id]=e.target.value; save(); });
+$("rate").oninput=e=>{ S.settings.rate=+e.target.value; $("rate-v").textContent=(+e.target.value).toFixed(2); save(); };
+$("rate").onchange=()=>say("This is how fast I will speak.");
+$("autoread").onchange=e=>{ S.settings.autoread=e.target.checked; save(); };
+$("voicemode").onchange=e=>{ S.settings.voicemode=e.target.checked; save(); };
+$("model").onchange=e=>{ S.settings.model=e.target.value; save(); };
+$("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(!v) return;
+  // pick the provider from the key itself
+  if(/^sk-ant-/.test(v)) S.settings.provider = "claude";
+  else if(/^sk-/.test(v)) S.settings.provider = "openai";
+  else { $("apikey-state").textContent = "Ez nem API-kulcsnak tűnik. Az OpenAI-kulcs sk- kezdetű, a Claude-kulcs sk-ant- kezdetű."; return; }
+  save(); $("provider").value = S.settings.provider;
+  try{ localStorage.setItem(keyName(), v); }catch(e){} $("apikey").value=""; samplePromise=null; oaiModels=null; renderKeyState(); };
+$("apikey-del").onclick=()=>{ try{ localStorage.removeItem(keyName()); }catch(e){} samplePromise=null; oaiModels=null; renderKeyState(); };
+$("provider").onchange=e=>{ S.settings.provider=e.target.value; save(); samplePromise=null; renderKeyState(); };
+$("oai-model").onchange=e=>{ if(e.target.value){ S.settings.oaiModel=e.target.value; save(); } };
+$("export").onclick=async()=>{ const t=$("io"); t.hidden=false; t.value=JSON.stringify(S); t.select(); try{ await navigator.clipboard.writeText(t.value); $("export").textContent="Kimásolva ✓"; }catch(e){ $("export").textContent="Jelöld ki és másold"; } };
+let importArmed=false;
+$("import").onclick=()=>{
+  const t=$("io");
+  if(t.hidden || !importArmed){ t.hidden=false; t.value=""; t.placeholder="Illeszd be ide a kimásolt szöveget, majd koppints újra a Beillesztés gombra."; importArmed=true; t.focus(); return; }
+  try{ S=merge(JSON.parse(t.value)); save(); renderAll(); $("import").textContent="Betöltve ✓"; t.hidden=true; importArmed=false; }catch(e){ $("import").textContent="Hibás szöveg"; }
+};
+$("strict").onchange=e=>{ S.settings.strict=e.target.checked; save(); };
+let resetArmed=false;
+$("reset-chat").onclick=e=>{
+  if(!resetArmed){ resetArmed=true; e.target.textContent="Biztosan? Koppints újra"; setTimeout(()=>{resetArmed=false; e.target.textContent="Beszélgetés újrakezdése";},3000); return; }
+  resetArmed=false; e.target.textContent="Beszélgetés újrakezdése";
+  S.chats[S.settings.scenario]=[]; save(); renderChat(); show("chat");
+};
+
+/* ---------- events ---------- */
+function show(v){
+  ["chat","vocab","read","car","set","test"].forEach(x=>$("v-"+x).hidden = x!==v);
+  if(v==="test") renderTest();
+  if(v==="read") renderRead();
+  if(v==="car") renderCar();
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected", b.dataset.v===v));
+  $("composer-wrap").hidden = v!=="chat";
+  if(v==="vocab") renderVocab();
+  if(v==="chat") scrollDown();
+}
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));
+$("scen").onclick=e=>{ const b=e.target.closest("[data-s]"); if(!b||busy) return; S.settings.scenario=b.dataset.s; save(); renderScen(); renderChat(); };
+$("chat").onclick=e=>{
+  const s=e.target.closest("[data-say]"); if(s){ say(chatOf()[+s.dataset.say].content); return; }
+  const t=e.target.closest("[data-tr]"); if(t){ translate(+t.dataset.tr); }
+};
+$("vlist").onclick=e=>{ const d=e.target.closest("[data-del]"); if(!d) return; S.vocab.splice(+d.dataset.del,1); flashIdx=null; save(); renderVocab(); };
+$("send").onclick=send;
+$("mic").onclick=toggleMic;
+function autosize(){ const t=$("input"); t.style.height="auto"; t.style.height=Math.min(120,t.scrollHeight)+"px"; }
+$("input").addEventListener("input",autosize);
+$("input").addEventListener("keydown",e=>{ if(e.key==="Enter" && !e.shiftKey && !matchMedia("(pointer:coarse)").matches){ e.preventDefault(); send(); } });
+
+/* ---------- help ("Segíts") ---------- */
+$("help").onclick = async () => {
+  const box = $("chat"); const old = $("helpbox"); if(old){ old.remove(); return; }
+  let sample = null; try{ sample = await getSample(); }catch(e){}
+  if(!sample){ box.insertAdjacentHTML("beforeend", `<div class="err">Az AI most nem érhető el.</div>`); scrollDown(); return; }
+  const sc = SCENARIOS.find(s=>s.id===S.settings.scenario)||SCENARIOS[0]; const lv = S.settings.level;
+  const hist = chatOf().slice(-6).map(m=>(m.role==="user"?"Learner: ":"Tutor: ")+m.content).join("\n");
+  const draft = $("input").value.trim();
+  box.insertAdjacentHTML("beforeend", `<div class="helpbox" id="helpbox"><span class="muted">Ötletek készülnek…</span></div>`); scrollDown();
+  try{
+    const r = await sample.json(`A Hungarian learner (English level ${lv}: ${LEVEL_DESC[lv]}) is stuck in an English conversation practice. Scenario: ${sc.en}.
+Conversation so far:
+${hist || "(the tutor has not spoken yet)"}
+${draft ? "The learner started typing: "+draft : ""}
+Help them answer the tutor's last message. Give 3 different natural sentence starters or short full answers the learner could say (at their level), and 3 useful words or phrases for this moment.
+Return JSON only: {"starters":[{"en":"...","hu":"<Hungarian translation>"}],"words":[{"en":"...","hu":"..."}]}`, {modelTier:"quick"});
+    const st = (r && Array.isArray(r.starters) ? r.starters : []).filter(x=>x&&x.en).slice(0,3);
+    const ws = (r && Array.isArray(r.words) ? r.words : []).filter(x=>x&&x.en&&x.hu).slice(0,3);
+    const hb = $("helpbox"); if(!hb) return;
+    hb.innerHTML = `<span class="lbl">Így kezdheted</span>${st.map((x,i)=>`<button class="starter" data-st="${i}">${esc(x.en)}<small>${esc(x.hu||"")}</small></button>`).join("")}
+      ${ws.length ? `<span class="lbl">Hasznos szavak</span><div class="words">${ws.map(w=>`<span class="word-pill">${esc(w.en)} = ${esc(w.hu)}</span>`).join("")}</div>` : ""}`;
+    hb.onclick = e => { const b = e.target.closest("[data-st]"); if(!b) return; $("input").value = st[+b.dataset.st].en + " "; autosize(); $("input").focus(); hb.remove(); };
+    addWords(ws.map(w=>({en:String(w.en), hu:String(w.hu), example:""}))); save();
+    scrollDown();
+  }catch(e){ const hb=$("helpbox"); if(hb) hb.innerHTML = `<span class="err">Nem sikerült ötletet kérni. Próbáld újra.</span>`; }
+};
+
+/* ---------- level test ---------- */
+const LEVELS = ["A1","A2","B1","B2","C1"];
+let test = null; // {questions:[{q,options,answer,level}], answers:[], done}
+function renderTest(){
+  const out = $("test-out");
+  if(!test){
+    out.innerHTML = `${S.levelTested ? `<p>Legutóbbi eredményed: <b>${esc(S.settings.level)}</b>.</p>` : ""}<div class="row"><button class="btn primary" id="test-go">Teszt indítása</button></div>`;
+    $("test-go").onclick = startTest; return;
+  }
+  if(test.loading){ out.innerHTML = `<p class="muted">A kérdések készülnek…</p>`; return; }
+  const i = test.answers.length;
+  if(i < test.questions.length){
+    const q = test.questions[i];
+    out.innerHTML = `<p class="muted">${i+1} / ${test.questions.length}</p><div class="q"><div class="qt">${esc(q.q)}</div><div class="opts">${q.options.map((o,j)=>`<button class="opt" data-o="${j}">${esc(o)}</button>`).join("")}<button class="opt" data-o="-1"><i>Nem tudom</i></button></div></div>`;
+    out.querySelectorAll("[data-o]").forEach(b=>b.onclick=()=>{ test.answers.push(+b.dataset.o); renderTest(); });
+    return;
+  }
+  // score: highest level where >= 2 of 3 correct, counting up while it holds
+  let level = "A1";
+  for(const L of LEVELS){
+    const qs = test.questions.map((q,k)=>({q,k})).filter(x=>x.q.level===L);
+    if(!qs.length) continue;
+    const ok = qs.filter(x=>test.answers[x.k]===x.q.answer).length;
+    if(ok/qs.length >= 0.6) level = L; else break;
+  }
+  const total = test.questions.filter((q,k)=>test.answers[k]===q.answer).length;
+  S.settings.level = level; S.levelTested = true; save(); renderSettings();
+  out.innerHTML = `<div class="card"><div class="muted">A szinted kb.</div><div class="en">${level}</div><div class="muted">${total} / ${test.questions.length} helyes válasz. A szintet beállítottam, a Beállításokban bármikor átírhatod.</div></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="test-again">Újra</button><button class="btn primary" id="test-chat">Beszélgessünk</button></div>`;
+  $("test-again").onclick = ()=>{ test=null; startTest(); };
+  $("test-chat").onclick = ()=>{ test=null; show("chat"); };
+}
+async function startTest(){
+  let sample = null; try{ sample = await getSample(); }catch(e){}
+  if(!sample){ $("test-out").innerHTML = `<p class="err">Az AI most nem érhető el.</p>`; return; }
+  test = {loading:true, questions:[], answers:[]}; renderTest();
+  try{
+    const r = await sample.json(`Create an English placement test for a Hungarian adult learner. 12 multiple-choice questions mixing grammar, vocabulary and reading-in-context, 2 at A1, 3 at A2, 3 at B1, 2 at B2, 2 at C1, ordered from easiest to hardest. Each has 4 options and exactly one correct answer. Vary the position of the correct answer. Short questions, everyday and work contexts.
+Return JSON only: {"questions":[{"level":"A1","q":"...","options":["...","...","...","..."],"answer":<0-3>}]}`, {modelTier:"default"});
+    const qs = (r && Array.isArray(r.questions) ? r.questions : []).filter(q=>q && q.q && Array.isArray(q.options) && q.options.length>=3 && Number.isInteger(q.answer) && LEVELS.includes(q.level));
+    if(qs.length < 6) throw new Error("few");
+    test = {questions:qs, answers:[]};
+  }catch(e){ test = null; $("test-out").innerHTML = `<p class="err">Nem sikerült a tesztet elkészíteni. Próbáld újra.</p><div class="row"><button class="btn primary" id="test-go">Újra</button></div>`; $("test-go").onclick = startTest; return; }
+  renderTest();
+}
+$("open-test").onclick = ()=>show("test");
+
+/* ---------- word packs ---------- */
+$("pack-gen").onclick = async e => {
+  const btn = e.currentTarget; let sample = null; try{ sample = await getSample(); }catch(_){}
+  if(!sample){ btn.textContent = "Az AI nem érhető el"; setTimeout(()=>btn.textContent="10 új szó", 2500); return; }
+  const [kind, topic] = $("pack-topic").value.split(/:(.+)/);
+  const lv = S.settings.level; const have = S.vocab.map(v=>v.en).slice(-80).join(" | ");
+  btn.disabled = true; btn.textContent = "Készül…";
+  try{
+    const r = await sample.json(`Give 10 ${kind==="arch" ? "professional English terms an architect uses, on this topic: "+topic : "items from this list: "+topic} for a Hungarian learner at ${lv} level (still include the real professional terms, explain them simply).
+Do not repeat any of these: ${have || "-"}.
+For each: the English term, its Hungarian equivalent${kind==="idiom" ? " (meaning, or the matching Hungarian saying)" : " (the term Hungarian architects use)"}, and one short natural example sentence ${kind==="arch" ? "from an architect's work" : ""}.
+Return JSON only: {"items":[{"en":"...","hu":"...","example":"..."}]}`, {modelTier:"default"});
+    const items = (r && Array.isArray(r.items) ? r.items : []).filter(x=>x&&x.en&&x.hu).map(x=>({en:String(x.en), hu:String(x.hu), example:String(x.example||"")}));
+    if(!items.length) throw new Error("empty");
+    const before = S.vocab.length; addWords(items); markDay(); save();
+    flashIdx = null; renderVocab();
+    btn.textContent = `+${S.vocab.length-before} szó ✓`;
+  }catch(err){ btn.textContent = "Nem sikerült"; }
+  finally{ btn.disabled = false; setTimeout(()=>btn.textContent="10 új szó", 2500); }
+};
+
+/* ---------- reading ---------- */
+function renderRead(){
+  const r = S.reading, out = $("read-out");
+  if(!r){ out.innerHTML = `<p class="muted">Válassz típust, és nyomd meg az „Új szöveg” gombot.</p>`; return; }
+  const answered = r.answers || [];
+  const correct = r.questions.filter((q,i)=>answered[i]===q.answer).length;
+  out.innerHTML = `<div class="reading"><h3>${esc(r.title||"")}</h3>${String(r.text).split(/\n+/).map(p=>`<p>${esc(p)}</p>`).join("")}
+    <div class="row"><button class="icon-btn" id="read-say">🔊 Felolvasás</button><button class="icon-btn" id="read-stop">■ Állj</button></div></div>
+    ${r.questions.map((q,i)=>`<div class="q"><div class="qt">${i+1}. ${esc(q.q)}</div><div class="opts">${q.options.map((o,j)=>{
+      const a = answered[i]; let cls = "";
+      if(a!==undefined && a!==null){ if(j===q.answer) cls="right"; else if(j===a) cls="wrong"; }
+      return `<button class="opt ${cls}" data-q="${i}" data-o="${j}" ${a!=null?"disabled":""}>${esc(o)}</button>`; }).join("")}</div>
+      ${answered[i]!=null && q.explain_hu ? `<div class="why">${esc(q.explain_hu)}</div>` : ""}</div>`).join("")}
+    ${answered.filter(a=>a!=null).length===r.questions.length ? `<div class="score">Eredmény: ${correct} / ${r.questions.length}</div>` : ""}
+    ${r.glossary && r.glossary.length ? `<h2 style="margin-top:20px">Szószedet</h2><ul class="vlist">${r.glossary.map(g=>`<li><span class="w">${esc(g.en)}</span><span class="m">${esc(g.hu)}</span></li>`).join("")}</ul>
+      <div class="row" style="margin-top:10px"><button class="btn" id="read-add">${r.added ? "Hozzáadva a szókártyákhoz ✓" : "Szavak hozzáadása a szókártyákhoz"}</button></div>` : ""}`;
+  $("read-say").onclick = ()=>say(r.text);
+  $("read-stop").onclick = ()=>{ try{ speechSynthesis.cancel(); }catch(e){} };
+  const add = $("read-add"); if(add) add.onclick = ()=>{ if(r.added) return; addWords(r.glossary); r.added = true; save(); renderRead(); };
+}
+$("read-out").addEventListener("click", e=>{
+  const b = e.target.closest("[data-q]"); if(!b || !S.reading) return;
+  const r = S.reading; r.answers = r.answers || []; r.answers[+b.dataset.q] = +b.dataset.o;
+  markDay(); save(); renderRead();
+});
+$("read-gen").onclick = async e=>{
+  const btn = e.currentTarget; const sample = await getSample();
+  if(!sample){ btn.textContent = "Előbb add meg az API-kulcsot a Beállításokban"; return; }
+  const lv = S.settings.level; btn.disabled = true; btn.textContent = "Szöveg készül…";
+  try{
+    const res = await sample.json(`Write a reading-comprehension exercise for a Hungarian architect learning English at ${lv} level (${LEVEL_DESC[lv]}).
+Text type: ${$("read-type").value}. Length: ${lv==="A1"?"60-90":lv==="A2"?"90-130":lv==="B1"?"130-180":"180-250"} words, realistic and specific (names, numbers, materials). Use paragraphs separated by \\n.
+Then 4 multiple-choice questions in English testing understanding of the text (4 options each), and a glossary of 6-8 useful words or phrases from the text with Hungarian meanings.
+Return JSON only: {"title":"...","text":"...","questions":[{"q":"...","options":["...","...","...","..."],"answer":<index 0-3>,"explain_hu":"<one sentence in Hungarian: where in the text the answer is>"}],"glossary":[{"en":"...","hu":"..."}]}`, {modelTier:"default"});
+    if(!res || !res.text || !Array.isArray(res.questions)) throw new Error("bad");
+    res.questions = res.questions.filter(q=>q && Array.isArray(q.options) && q.options.length>=2 && Number.isInteger(q.answer));
+    res.glossary = (res.glossary||[]).filter(g=>g && g.en && g.hu);
+    S.reading = {title:res.title||"", text:res.text, questions:res.questions, glossary:res.glossary, answers:[], added:false};
+    save(); renderRead();
+  }catch(err){
+    $("read-out").insertAdjacentHTML("afterbegin", `<p class="err">${err && err.code==="rate_limited" ? "Túl sok kérés, várj egy percet." : "Nem sikerült szöveget készíteni, próbáld újra."}</p>`);
+  }finally{ btn.disabled = false; btn.textContent = "Új szöveg"; }
+};
+
+/* ---------- car mode ---------- */
+const PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+let car = {playing:false, idx:0, token:0, stage:"", wake:null};
+function carItems(){
+  const src = S.settings.carSrc || "vocab";
+  if(src==="vocab") return S.vocab.map(v=>({en:v.en, hu:v.hu, example:v.example}));
+  return (S.carSets && S.carSets[src]) || [];
+}
+function renderCarSrc(){
+  const sets = S.carSets || {};
+  const opts = [`<option value="vocab">Szókártyáim (${S.vocab.length})</option>`]
+    .concat(SCENARIOS.filter(s=>sets[s.id] && sets[s.id].length).map(s=>`<option value="${s.id}">Kifejezések: ${esc(s.hu)} (${sets[s.id].length})</option>`));
+  $("car-src").innerHTML = opts.join("");
+  $("car-src").value = S.settings.carSrc && (S.settings.carSrc==="vocab" || sets[S.settings.carSrc]) ? S.settings.carSrc : "vocab";
+  $("car-pause").value = String(S.settings.carPause || 5);
+  const sc = SCENARIOS.find(s=>s.id===S.settings.scenario)||SCENARIOS[0];
+  $("car-gen").textContent = `Új kifejezések: ${sc.hu}`;
+}
+function renderCar(){
+  renderCarSrc();
+  const items = carItems();
+  $("car-play").innerHTML = car.playing ? PAUSE_SVG : PLAY_SVG;
+  $("car-play").setAttribute("aria-label", car.playing ? "Szünet" : "Lejátszás");
+  const n = $("car-now");
+  if(!items.length){
+    n.innerHTML = `<div class="en" style="font-size:1.3rem">Még nincs mit hallgatni</div><div class="muted">Beszélgess Emmával, hogy legyenek szavaid, vagy kérj új kifejezéseket a fenti gombbal.</div>`;
+    return;
+  }
+  if(car.idx>=items.length) car.idx=0;
+  const it = items[car.idx];
+  const showEn = car.stage==="en" || car.stage==="ex" || !car.playing;
+  n.innerHTML = `<div class="stage">${car.playing ? ({hu:"Hallgasd",think:"Mondd angolul!",en:"Ismételd",ex:"Példamondat"}[car.stage]||"") : "Szünetel"}</div>
+    <div class="hu">${esc(it.hu)}</div>
+    <div class="en">${showEn ? esc(it.en) : "…"}</div>
+    ${car.stage==="ex" && it.example ? `<div class="muted"><i>${esc(it.example)}</i></div>` : ""}
+    <div class="count">${car.idx+1} / ${items.length}</div>`;
+}
+function pickVoice(lang){
+  return voices.find(v=>v.lang===lang) || voices.find(v=>v.lang && v.lang.replace("_","-").toLowerCase().startsWith(lang.slice(0,2).toLowerCase()));
+}
+function speakP(text, lang, rate){
+  return new Promise(res=>{
+    if(!("speechSynthesis" in window) || !text) return res();
+    try{
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang; u.rate = rate; const v = pickVoice(lang); if(v) u.voice = v;
+      const done = ()=>{ clearTimeout(t); res(); };
+      const t = setTimeout(done, 4000 + text.length*150); // safety if onend never fires
+      u.onend = done; u.onerror = done;
+      speechSynthesis.speak(u);
+    }catch(e){ res(); }
+  });
+}
+const wait = ms => new Promise(r=>setTimeout(r, ms));
+async function carLoop(){
+  const my = ++car.token;
+  const alive = () => car.playing && car.token===my;
+  while(alive()){
+    const items = carItems(); if(!items.length){ stopCar(); return; }
+    if(car.idx>=items.length) car.idx=0;
+    const it = items[car.idx];
+    const step = async (stage, fn) => { if(!alive()) return false; car.stage=stage; renderCar(); await fn(); return alive(); };
+    if(!await step("hu", ()=>speakP(it.hu, "hu-HU", 1))) return;
+    if(!await step("think", ()=>wait((S.settings.carPause||5)*1000))) return;
+    if(!await step("en", async()=>{ await speakP(it.en, S.settings.accent, S.settings.rate); await wait(1200); await speakP(it.en, S.settings.accent, S.settings.rate); })) return;
+    if(it.example){ if(!await step("ex", async()=>{ await wait(600); await speakP(it.example, S.settings.accent, S.settings.rate); })) return; }
+    await wait(1500);
+    if(!alive()) return;
+    car.idx = (car.idx+1) % items.length;
+  }
+}
+async function startCar(){
+  if(!carItems().length) return;
+  car.playing = true; markDay(); save();
+  try{ if(navigator.wakeLock) car.wake = await navigator.wakeLock.request("screen"); }catch(e){}
+  carLoop();
+}
+function stopCar(){
+  car.playing = false; car.token++; car.stage="";
+  try{ speechSynthesis.cancel(); }catch(e){}
+  try{ car.wake && car.wake.release(); }catch(e){} car.wake=null;
+  renderCar();
+}
+function carJump(d){
+  const n = carItems().length; if(!n) return;
+  car.idx = (car.idx + d + n) % n;
+  if(car.playing){ car.token++; try{ speechSynthesis.cancel(); }catch(e){} carLoop(); } else renderCar();
+}
+document.addEventListener("visibilitychange", async ()=>{
+  if(document.visibilityState==="visible" && car.playing && !car.wake){ try{ car.wake = await navigator.wakeLock.request("screen"); }catch(e){} }
+  if(document.visibilityState!=="visible") car.wake=null;
+});
+$("car-play").onclick = ()=> car.playing ? stopCar() : startCar();
+$("car-prev").onclick = ()=>carJump(-1);
+$("car-next").onclick = ()=>carJump(1);
+$("car-src").onchange = e=>{ S.settings.carSrc = e.target.value; car.idx=0; save(); if(car.playing){ car.token++; try{speechSynthesis.cancel();}catch(_){} carLoop(); } else renderCar(); };
+$("car-pause").onchange = e=>{ S.settings.carPause = +e.target.value; save(); };
+$("car-gen").onclick = async e=>{
+  const btn = e.currentTarget; const sample = await getSample();
+  if(!sample){ btn.textContent = "Előbb add meg az API-kulcsot a Beállításokban"; return; }
+  const sc = SCENARIOS.find(s=>s.id===S.settings.scenario)||SCENARIOS[0];
+  const lv = S.settings.level; const old = btn.textContent; btn.disabled = true; btn.textContent = "Kifejezések készülnek…";
+  const have = ((S.carSets||{})[sc.id]||[]).map(x=>x.en);
+  try{
+    const res = await sample.json(`Create 12 short, very useful spoken English phrases for a Hungarian learner at ${lv} level (${LEVEL_DESC[lv]}) for this situation: ${sc.en}.
+Each phrase should be something the learner would actually say, max 8 words. ${have.length ? "Do not repeat these: "+have.slice(-40).join(" | ") : ""}
+Return JSON only: {"items":[{"en":"<English phrase>","hu":"<natural Hungarian translation>","example":"<optional short reply someone might give, in English, or empty string>"}]}`, {modelTier:"default"});
+    const items = (res && Array.isArray(res.items) ? res.items : []).filter(x=>x && x.en && x.hu).map(x=>({en:String(x.en).trim(), hu:String(x.hu).trim(), example:String(x.example||"").trim()}));
+    if(!items.length) throw new Error("empty");
+    S.carSets = S.carSets || {};
+    S.carSets[sc.id] = (S.carSets[sc.id]||[]).concat(items).slice(-60);
+    addWords(items.map(x=>({en:x.en, hu:x.hu, example:""})));
+    S.settings.carSrc = sc.id; car.idx = Math.max(0, S.carSets[sc.id].length - items.length);
+    save(); btn.textContent = old; renderCar();
+  }catch(err){
+    btn.textContent = err && err.code==="rate_limited" ? "Túl sok kérés, várj egy percet" : "Nem sikerült, próbáld újra";
+    setTimeout(()=>{ btn.textContent = old; }, 3000);
+  }finally{ btn.disabled = false; }
+};
+
+function renderAll(){ renderScen(); renderChat(); renderSettings(); renderStreak(); if(!$("v-vocab").hidden) renderVocab(); if(!$("v-car").hidden) renderCar(); }
+initStore();
+if("serviceWorker" in navigator){ window.addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); }); }
+if(!getKey()) setTimeout(()=>{ if(!chatOf().length) show("set"); }, 300);
+</script>
+</body>
+</html>
