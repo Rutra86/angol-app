@@ -303,7 +303,7 @@ nav.tabs button{font-size:.75rem}
         <label for="voice">Emma hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
-        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 10</span>
+        <span class="muted" style="font-size:.8rem">Verzió: 2026-11-02 / 11</span>
         <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
       </div>
       <div class="field">
@@ -970,8 +970,9 @@ function listen(auto){
 /* ---------- OpenAI speech-to-text: record, detect silence, transcribe ---------- */
 let mrec = null, mstream = null, mctx = null;
 function stopRecording(){ try{ mrec && mrec.state!=="inactive" && mrec.stop(); }catch(e){} }
+let sttModelOk = null;
 function pickTranscribeModel(){
-  const ids = oaiAllIds || [];
+  const ids = (oaiAllIds || []).filter(id=>!/realtime|diariz|preview/.test(id));
   return ids.find(id=>/transcribe$/.test(id) && !/mini/.test(id)) || ids.find(id=>/transcribe/.test(id) && !/diariz/.test(id)) || "whisper-1";
 }
 async function recordOpenAI(auto){
@@ -1008,12 +1009,30 @@ async function recordOpenAI(auto){
     try{
       const blob = new Blob(chunks, {type: blobType});
       const ext = /mp4/.test(blobType) ? "m4a" : /ogg/.test(blobType) ? "ogg" : "webm";
-      const fd = new FormData();
-      fd.append("file", blob, "speech."+ext);
-      fd.append("model", pickTranscribeModel());
-      fd.append("prompt", "A Hungarian architect practising English conversation. Mostly English, sometimes Hungarian.");
-      const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"Authorization":"Bearer "+oaiKey()}, body:fd});
-      if(!r.ok){ let m=""; try{ m=(await r.json()).error.message; }catch(_){} throw oaiError(r.status, m); }
+      // try the best model first; if this account rejects it (e.g. 404 Invalid URL), fall back to older ones
+      const models = [...new Set([sttModelOk || pickTranscribeModel(), "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"])];
+      let r = null, lastErr = null;
+      for(const model of models){
+        const fd = new FormData();
+        fd.append("file", blob, "speech."+ext);
+        fd.append("model", model);
+        if(!/diariz/.test(model)) fd.append("prompt", "A Hungarian architect practising English conversation. Mostly English, sometimes Hungarian.");
+        r = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"Authorization":"Bearer "+oaiKey()}, body:fd});
+        if(r.ok){ sttModelOk = model; break; }
+        let m=""; try{ m=(await r.json()).error.message; }catch(_){}
+        lastErr = oaiError(r.status, m);
+        if(r.status===401 || r.status===429) break;
+      }
+      if(!r || !r.ok){
+        // last resort: switch to the free browser recognition so the mic keeps working
+        if((window.SpeechRecognition || window.webkitSpeechRecognition) && !(lastErr && lastErr.code==="auth")){
+          S.settings.stt = "browser"; save(); try{ $("stt").value = "browser"; }catch(_){}
+          $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
+          micHint("Az OpenAI beszédfelismerés nem működött, átváltottam a böngésző ingyenes felismerésére. Nyomd meg újra a mikrofont.");
+          return;
+        }
+        throw lastErr;
+      }
       const j = await r.json();
       const text = String(j.text||"").trim();
       $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
