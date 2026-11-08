@@ -338,7 +338,7 @@ nav.tabs button{font-size:.75rem}
         <textarea id="io" rows="3" hidden style="font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px;margin-top:6px"></textarea>
       </div>
       <p class="note" id="store-note">Az előrehaladásod mentése…</p>
-      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 15</p>
+      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-08 / 16</p>
     </section>
   </main>
 
@@ -485,16 +485,29 @@ function fillOai(){
   sel.innerHTML = oaiModels.map(id=>`<option value="${esc(id)}">${esc(id)}</option>`).join("");
   sel.value = cur;
 }
-let oaiNoEffort = false;
-async function oaiCall(key, model, messages, onText, stream){
+// Thinking time is the biggest delay before Emma answers. For the conversation we ask for the
+// least thinking the model accepts ("none", then "minimal", then "low"), and remember what worked.
+const EFFORT_FAST = ["none","minimal","low",""], EFFORT_NORMAL = ["low",""];
+function effortStart(ladder, model){ try{ const v = localStorage.getItem("bsz-effort-"+ladder[0]+"-"+model); if(v!==null && ladder.includes(v)) return ladder.indexOf(v); }catch(e){} return 0; }
+async function oaiCall(key, model, messages, onText, stream, fast){
   const go = extra => fetch("https://api.openai.com/v1/chat/completions", {
     method:"POST",
     headers:{"Content-Type":"application/json", "Authorization":"Bearer "+key},
     body: JSON.stringify(Object.assign({model, messages, stream, max_completion_tokens:4000}, extra))
   });
-  let res = await go(oaiNoEffort ? {} : {reasoning_effort:"low"});
-  if(!oaiNoEffort && res.status===400){ oaiNoEffort = true; res = await go({}); }
-  if(!res.ok){ let m=""; try{ m=(await res.json()).error.message; }catch(_){} throw oaiError(res.status, m); }
+  const ladder = fast ? EFFORT_FAST : EFFORT_NORMAL;
+  let i = effortStart(ladder, model), res, errMsg = null;
+  for(;;){
+    res = await go(ladder[i] ? {reasoning_effort:ladder[i]} : {});
+    errMsg = null;
+    if(res.status===400 && ladder[i]){
+      try{ errMsg = (await res.json()).error.message || ""; }catch(_){ errMsg = ""; }
+      if(/reasoning|effort|unsupported|not supported|invalid value/i.test(errMsg) && i < ladder.length-1){ i++; continue; }
+    }
+    break;
+  }
+  if(res.ok){ try{ localStorage.setItem("bsz-effort-"+ladder[0]+"-"+model, ladder[i]); }catch(e){} }
+  if(!res.ok){ let m = errMsg || ""; if(errMsg===null){ try{ m=(await res.json()).error.message; }catch(_){} } throw oaiError(res.status, m); }
   if(!stream){ const j = await res.json(); const t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || ""; if(onText && t) onText({text:t}); return t; }
   const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", text = "";
   for(;;){
@@ -516,10 +529,11 @@ function makeOaiRun(key){
     const model = S.settings.oaiModel;
     if(!model) throw {code:"model", message:"Válassz modellt a Beállításokban."};
     let text;
-    try{ text = await oaiCall(key, model, messages, opts.onText, true); }
+    const fast = !opts.modelTier || opts.modelTier==="quick"; // conversation, translation, help: answer fast
+    try{ text = await oaiCall(key, model, messages, opts.onText, true, fast); }
     catch(e){
       if(!e || !e.code){ throw {code:"network", message:String((e && e.message)||"")}; }
-      if(e.code==="invalid_request" && /stream/i.test(e.message)) text = await oaiCall(key, model, messages, opts.onText, false);
+      if(e.code==="invalid_request" && /stream/i.test(e.message)) text = await oaiCall(key, model, messages, opts.onText, false, fast);
       else throw e;
     }
     if(!text) throw {code:"empty_completion", message:""};
@@ -701,17 +715,28 @@ async function ask(){
   const bubble = document.createElement("div"); bubble.className="msg tutor typing"; bubble.textContent="Emma gépel…";
   box.appendChild(bubble); scrollDown();
   const asText = v => typeof v==="string" ? v : (v && typeof v.text==="string") ? v.text : "";
-  let earlyP = null;
+  let earlyP = null, spokenUpTo = 0, replyDone = false;
+  const speakRest = (full) => {
+    // queue whatever part of the reply has not been spoken yet
+    const rest = full.slice(spokenUpTo).trim(); spokenUpTo = full.length;
+    if(!rest) return;
+    if(!earlyP){ stopSpeaking(); earlyP = speakP(rest, S.settings.accent, S.settings.rate); return; }
+    prefetchEN(rest);
+    const g = speakGen; earlyP = earlyP.then(()=> g===speakGen ? speakP(rest, S.settings.accent, S.settings.rate) : null);
+  };
   try{
     const res = await sample(buildInput(c.map(m=>({role:m.role, content:String(m.content||""), spoken:!!m.spoken}))), {
       cache:false,
-      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r){ bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); }
-        // the spoken reply is complete once the feedback marker arrives: start talking while the corrections are still streaming
-        if(!earlyP && r && t.indexOf("@@@")>=0 && (handsOn() || S.settings.autoread)){ stopSpeaking(); earlyP = speakP(r, S.settings.accent, S.settings.rate); }
+      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r && !/^R(E(P(L(Y)?)?)?)?$/i.test(r)){ bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); }
+        if(!r || replyDone || !(handsOn() || S.settings.autoread)) return;
+        if(t.indexOf("@@@")>=0){ replyDone = true; speakRest(r); return; } // reply complete: speak the rest while the corrections stream
+        // start talking as soon as the first sentence is complete, instead of waiting for the whole answer
+        if(!earlyP){ const m = r.match(/^[\s\S]*?[.!?](?=\s+["'A-Z])/); if(m && m[0].length >= 2){ stopSpeaking(); spokenUpTo = m[0].length; earlyP = speakP(m[0], S.settings.accent, S.settings.rate); } }
       }catch(_){} }
     });
     const text = asText(res);
     const {reply, fb} = splitOut(text);
+    if(earlyP && !replyDone){ replyDone = true; speakRest(reply); }
     const lastUser = c[c.length-1];
     if(lastUser && lastUser.role==="user"){
       lastUser.fb = fb ? ((fb.correction && fb.correction.corrected) ? fb.correction : null) : "err";
@@ -819,20 +844,26 @@ function pickTtsModel(){
   ids.sort((x,y)=>y.localeCompare(x, undefined, {numeric:true})); // newest first
   return ids.find(id=>!/^tts-1/.test(id) && !/mini/.test(id)) || ids.find(id=>!/^tts-1/.test(id)) || ids.find(id=>/hd/.test(id)) || ids[0] || "tts-1";
 }
-async function oaiTTS(text, voice, rate){
-  const key = oaiKey(); const model = pickTtsModel(); const gen = speakGen;
-  rate = 1; // OpenAI voices sound most natural at their own pace; slowing them down makes them drag
+function oaiTtsUrl(text, voice){
+  const key = oaiKey(); const model = pickTtsModel(); const rate = 1; // OpenAI voices sound most natural at their own pace
   const ck = model+"|"+voice+"|"+rate+"|"+text;
-  let url = ttsCache.get(ck);
-  if(!url){
-    const body = {model, voice, input:text, speed: Math.max(0.25, Math.min(4, rate||1))};
+  if(ttsCache.has(ck)) return ttsCache.get(ck);
+  const p = (async()=>{
+    const body = {model, voice, input:text, speed: 1};
     if(!/^tts-1/.test(model)) body.instructions = "Voice: a warm, pleasant, natural-sounding woman in her early thirties, a kind English tutor. Affect: calm, friendly and genuinely human, never robotic. Tone: soft and reassuring. Pacing: relaxed, clear articulation with natural pauses.";
     let r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)});
     if(!r.ok && r.status===400 && body.instructions){ delete body.instructions; r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)}); }
     if(!r.ok) throw new Error("tts "+r.status);
-    url = URL.createObjectURL(await r.blob());
-    ttsCache.set(ck, url); if(ttsCache.size > 40){ const k = ttsCache.keys().next().value; URL.revokeObjectURL(ttsCache.get(k)); ttsCache.delete(k); }
-  }
+    return URL.createObjectURL(await r.blob());
+  })();
+  ttsCache.set(ck, p); p.catch(()=>ttsCache.delete(ck));
+  if(ttsCache.size > 40){ const k = ttsCache.keys().next().value; const old = ttsCache.get(k); ttsCache.delete(k); old.then(u=>URL.revokeObjectURL(u), ()=>{}); }
+  return p;
+}
+function prefetchEN(text){ const vc = voiceChoice(); if(text && vc.startsWith("openai:") && oaiKey()) oaiTtsUrl(text, vc.slice(7)).catch(()=>{}); }
+async function oaiTTS(text, voice, rate){
+  const gen = speakGen;
+  const url = await oaiTtsUrl(text, voice);
   if(gen !== speakGen) return; // stopped or replaced while loading: never play two voices at once
   try{ if(curAudio){ curAudio.pause(); } }catch(e){}
   await new Promise(res=>{
@@ -882,7 +913,8 @@ function micHint(msg){
 // Listening keeps going across short pauses: the browser ends each recognition
 // session after a pause, so we restart it and keep what was already recognised.
 // It stops when you tap the mic again, or after a longer silence.
-const SILENCE_MS = 4000, FIRST_WORD_MS = 10000, OAI_SILENCE_MS = 2200;
+// How long a pause means "I finished talking". In hands-free mode a shorter pause sends the answer sooner.
+const SILENCE_MS = 4000, HANDS_SILENCE_MS = 2000, FIRST_WORD_MS = 10000, OAI_SILENCE_MS = 1600;
 let recWanted = false, recTimer = null;
 function stopListening(){ recWanted = false; clearTimeout(recTimer); try{ rec && rec.stop(); }catch(e){} }
 function startListening(auto){
@@ -913,7 +945,7 @@ function startListening(auto){
         else interim += r[0].transcript;
       }
       $("input").value = committed + interim; autosize();
-      arm(SILENCE_MS);
+      arm(handsOn() ? HANDS_SILENCE_MS : SILENCE_MS);
     };
     rec.onerror = ev => {
       if(ev.error==="not-allowed" || ev.error==="service-not-allowed"){ recWanted=false; micHint(); }
@@ -1000,14 +1032,13 @@ async function recordOpenAI(auto){
     const src = mctx.createMediaStreamSource(mstream); const an = mctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
     const buf = new Float32Array(an.fftSize);
     const tick = () => {
-      if(!mrec || mrec.state==="inactive") return;
+      if(!mrec || mrec.state==="inactive"){ clearInterval(iv); return; }
       an.getFloatTimeDomainData(buf); let sum=0; for(const v of buf) sum += v*v; const rms = Math.sqrt(sum/buf.length);
       if(rms > 0.02){ spoke = true; lastLoud = Date.now(); }
       const now = Date.now();
-      if((spoke && now-lastLoud > OAI_SILENCE_MS) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 90000) stopRecording();
-      else requestAnimationFrame(tick);
+      if((spoke && now-lastLoud > OAI_SILENCE_MS) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 90000){ clearInterval(iv); stopRecording(); }
     };
-    requestAnimationFrame(tick);
+    const iv = setInterval(tick, 80);
   }catch(e){}
   mrec.onstop = async () => {
     try{ mstream.getTracks().forEach(t=>t.stop()); }catch(_){}
