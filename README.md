@@ -4,7 +4,7 @@ Saját angol beszélgetésgyakorló app. Böngészőben fut gépen és telefonon
 
 ## Mit tud
 
-- Beszélgetés Emmával, az AI tanárral: hétköznapi és építész szakmai témák, tárgyalás
+- Beszélgetés Mirával, az AI tanárral: hétköznapi és építész szakmai témák, tárgyalás
 - Hangos beszélgetés: mikrofon gomb, vagy „Folyamatos hangos beszélgetés” mód a Beállításokban
 - Javítás magyar magyarázattal, kiejtési tipp beszédnél
 - Szókártyák ismétléssel, szövegértés (Olvasás), autós hanglecke mód
@@ -38,3 +38,8 @@ A kulcsot senkinek ne küldd el. Ha kiszivárgott, töröld a szolgáltató olda
 - `index.html` – maga az app
 - `manifest.webmanifest`, `icon-*.png` – telepíthető ikon
 - `sw.js` – offline héj (az AI-hoz internet kell)
+
+## Android app (2026-11)
+Az `android/BeszeljAngolul` mappa a telefonos app (Trusted Web Activity) Android Studio projektje. A https://beszelj-angolul.netlify.app oldalt nyitja meg Chrome-ban.
+Az aláíró kulcs (`beszelj-angolul.jks`) és a jelszavak (`keystore.properties`) szándékosan NINCSENEK itt, mert a tároló nyilvános. Ezek a projekt fájljai között és a gépen vannak. Minden frissítést ugyanazzal a kulccsal kell aláírni.
+A weboldal tárhelye a Netlify. A zipben benne kell lennie az `assetlinks.json` és a `_redirects` fájlnak.

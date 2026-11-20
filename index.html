@@ -41,6 +41,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 header{padding-block:12px 8px;display:flex;align-items:center;gap:10px}
 header h1{font-family:var(--display);font-weight:800;font-size:1.35rem;margin:0;letter-spacing:-.01em}
 header h1 span{background:var(--mark);color:var(--mark-ink);padding:0 7px;border-radius:6px}
+.prof-chip{margin-left:10px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 11px;font:inherit;font-size:.85rem;font-weight:700;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.prof-list{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}
+.prof-list button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+.prof-list button[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .streak{margin-left:auto;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 main{flex:1;min-height:0;overflow-y:auto}
 .view{padding-block:8px 16px}
@@ -88,6 +92,13 @@ nav.tabs svg{width:22px;height:22px}
 .mic.on{background:var(--warn);color:#fff;border-color:var(--warn);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(240,138,93,.5)}50%{box-shadow:0 0 0 8px rgba(240,138,93,0)}}
 .round:disabled{opacity:.45}
+.listen-bar{display:flex;flex-direction:column;gap:5px;padding-top:8px;padding-bottom:0;font-size:.88rem;color:var(--muted)}
+.lb-track{height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.lb-fill{height:100%;width:0;background:var(--warn);transition:width .1s linear}
+.send .i-ok{display:none}
+#composer.rec .send .i-go{display:none}
+#composer.rec .send .i-ok{display:block}
+#composer.rec .send{animation:pulse 1.4s ease-in-out infinite}
 .hint{font-size:.8rem;color:var(--muted);padding-block:0 6px}
 
 /* vocab */
@@ -101,9 +112,10 @@ h2{font-family:var(--display);font-weight:600;font-size:1.2rem;margin:8px 0 6px}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 14px;flex:1;font-weight:700}
 .btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .vlist{list-style:none;padding:0;margin:0;display:flex;flex-direction:column}
-.vlist li{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line)}
-.vlist .w{font-weight:700;min-width:0;overflow-wrap:anywhere}
-.vlist .m{color:var(--muted);flex:1;min-width:0;overflow-wrap:anywhere}
+.vlist li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;column-gap:10px;row-gap:2px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.vlist .w{font-weight:700;min-width:0;overflow-wrap:break-word;grid-column:1;grid-row:1}
+.vlist .m{color:var(--muted);min-width:0;overflow-wrap:break-word;grid-column:1;grid-row:2}
+.vlist li > :not(.w):not(.m){grid-row:1 / span 2}
 .lvl{font-size:.75rem;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .del{background:none;border:0;color:var(--muted);padding:0 4px}
 
@@ -164,6 +176,7 @@ nav.tabs button{font-size:.75rem}
   <header class="pad">
     <h1>Beszélj <span>Angolul</span></h1>
     <div class="streak" id="streak">🔥 0 nap</div>
+    <button class="prof-chip" id="prof-chip" aria-label="Profil váltása" title="Profil"></button>
   </header>
 
   <main id="main">
@@ -178,8 +191,16 @@ nav.tabs button{font-size:.75rem}
       <h2>Szókártyák</h2>
       <p class="muted" id="vocab-sub">A beszélgetésekből gyűjtött szavaid.</p>
       <div class="pack-row">
-        <select id="pack-topic" aria-label="Szócsomag témája">
-          <option value="arch:building structures (foundations, walls, slabs, beams, columns, roofs)">Építész: szerkezetek</option>
+        <select id="pack-topic" aria-label="Szócsomag témája"></select>
+        <button class="btn primary" id="pack-gen" style="flex:0 0 auto">+10 szó</button>
+      </div>
+      <p class="muted" id="pack-info" style="font-size:.88rem;margin:-4px 0 6px"></p>
+      <details id="pack-peek" style="margin-bottom:12px"><summary class="muted" style="cursor:pointer;font-size:.9rem">Mi van a csomagban?</summary><ul class="vlist" id="pack-list" style="margin-top:8px"></ul></details>
+      <div class="field" style="margin-bottom:10px">
+        <label for="vfilter">Mit gyakoroljunk?</label>
+        <select id="vfilter"></select>
+      </div>
+      <template id="ai-topics"><option value="arch:building structures (foundations, walls, slabs, beams, columns, roofs)">Építész: szerkezetek</option>
           <option value="arch:building materials and finishes (concrete, timber, glazing, insulation, cladding)">Építész: anyagok, burkolatok</option>
           <option value="arch:building services / MEP (HVAC, plumbing, electrical, ventilation, energy)">Építész: épületgépészet</option>
           <option value="arch:design and drawings (floor plan, section, elevation, scale, revision, render)">Építész: tervezés, rajzok</option>
@@ -187,10 +208,7 @@ nav.tabs button{font-size:.75rem}
           <option value="arch:construction site and schedule (site meeting, defects, handover, delays, snagging)">Építész: építkezés, ütemterv</option>
           <option value="arch:planning and regulations (building permit, zoning, fire safety, accessibility)">Építész: engedélyezés, előírások</option>
           <option value="idiom:common everyday English idioms and phrasal verbs">Szólások: hétköznapi</option>
-          <option value="idiom:English idioms and fixed phrases used in business meetings and negotiations">Szólások: üzleti, tárgyalás</option>
-        </select>
-        <button class="btn primary" id="pack-gen" style="flex:0 0 auto">10 új szó</button>
-      </div>
+          <option value="idiom:English idioms and fixed phrases used in business meetings and negotiations">Szólások: üzleti, tárgyalás</option></template>
       <div id="flash"></div>
       <h2 style="margin-top:22px">Összes szó</h2>
       <ul class="vlist" id="vlist"></ul>
@@ -209,15 +227,7 @@ nav.tabs button{font-size:.75rem}
       <p class="muted">Rövid szakmai szövegek a szintedhez igazítva, ellenőrző kérdésekkel és szószedettel.</p>
       <div class="field">
         <label for="read-type">Szöveg típusa</label>
-        <select id="read-type">
-          <option value="a client's email to their architect about changes they want in the design">Ügyfél e-mailje</option>
-          <option value="an excerpt from an architectural technical specification (materials, finishes, building elements)">Műszaki leírás</option>
-          <option value="a weekly construction site progress report from the site manager">Építési jelentés</option>
-          <option value="an excerpt from an architect's services agreement (scope, fees, payment stages, liability)">Szerződésrészlet</option>
-          <option value="a short article from an architecture magazine about a recent building or a sustainable design trend">Szakcikk</option>
-          <option value="minutes of a design coordination meeting between the architect and engineers">Egyeztetés jegyzőkönyve</option>
-          <option value="a short everyday text such as a news story or a blog post">Hétköznapi szöveg</option>
-        </select>
+        <select id="read-type"></select>
       </div>
       <div class="row" style="margin-bottom:14px"><button class="btn primary" id="read-gen">Új szöveg</button></div>
       <div id="read-out"></div>
@@ -227,12 +237,12 @@ nav.tabs button{font-size:.75rem}
     <section class="view pad" id="v-car" hidden>
       <h2>Autós mód</h2>
       <div class="note" style="margin-bottom:18px;background:var(--surface)">
-        <b>Kihangosított beszélgetés Emmával</b><br>
-        Emma beszél, utána a mikrofon magától bekapcsol, és amit mondasz, el is küldi. Nem kell hozzányúlnod a telefonhoz. Leállítás: mondd, hogy <b>„stop”</b> vagy <b>„vége”</b>, vagy nyomd meg a piros gombot.
+        <b>Kihangosított beszélgetés Mirával</b><br>
+        Mira beszél, utána a mikrofon magától bekapcsol, és amit mondasz, el is küldi. Nem kell hozzányúlnod a telefonhoz. Leállítás: mondd, hogy <b>„stop”</b> vagy <b>„vége”</b>, vagy nyomd meg a piros gombot.
         <div class="row" style="margin-top:10px"><button class="btn primary" id="hf-start">Beszélgetés indítása</button></div>
       </div>
       <h3 style="margin:6px 0 4px">Kifejezésgyakorló</h3>
-      <p class="muted">Hallgasd kihangosítva. Emma magyarul mondja a kifejezést, a szünetben mondd ki hangosan angolul, aztán meghallod a helyes angol változatot kétszer. Nem kell hozzányúlnod, körbe-körbe megy.</p>
+      <p class="muted">Hallgasd kihangosítva. Mira magyarul mondja a kifejezést, a szünetben mondd ki hangosan angolul, aztán meghallod a helyes angol változatot kétszer. Nem kell hozzányúlnod, körbe-körbe megy.</p>
       <div class="field">
         <label for="car-src">Mit hallgassunk?</label>
         <select id="car-src"></select>
@@ -243,6 +253,9 @@ nav.tabs button{font-size:.75rem}
       <div class="field">
         <label for="car-pause">Gondolkodási idő</label>
         <select id="car-pause"><option value="3">3 mp</option><option value="5">5 mp</option><option value="8">8 mp</option></select>
+      </div>
+      <div class="field">
+        <div class="toggle"><input type="checkbox" id="car-listen"><label for="car-listen">Mira hallgassa meg, amit a szünetben mondasz, és jelezzen vissza (OpenAI-kulcs kell hozzá)</label></div>
       </div>
       <div class="car-now" id="car-now"></div>
       <div class="car-ctrl">
@@ -256,6 +269,14 @@ nav.tabs button{font-size:.75rem}
     <!-- SETTINGS -->
     <section class="view pad" id="v-set" hidden>
       <h2>Beállítások</h2>
+      <div class="field" id="prof-field">
+        <label>Profil (kinek a tanulása)</label>
+        <div class="prof-list" id="prof-list" role="group" aria-label="Profilok"></div>
+        <div class="row"><button class="btn" id="prof-add">+ Új profil</button><button class="btn" id="prof-rename">Átnevezés</button><button class="btn" id="prof-del">Törlés</button></div>
+        <label for="job" style="margin-top:10px">Foglalkozás, érdeklődés (Mira ehhez igazítja a témákat és a szócsomagokat)</label>
+        <input id="job" type="text" placeholder="pl. építész; szeretek utazni" style="font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:9px 12px">
+        <span class="muted" style="font-size:.88rem">Minden profilnak saját szavai, szintje, beszélgetései és beállításai vannak. Az API-kulcs közös.</span>
+      </div>
       <div class="field">
         <label for="provider">AI szolgáltató</label>
         <select id="provider">
@@ -300,7 +321,7 @@ nav.tabs button{font-size:.75rem}
         </select>
       </div>
       <div class="field">
-        <label for="voice">Emma hangja</label>
+        <label for="voice">Mira hangja</label>
         <select id="voice"></select>
         <div class="row"><button class="btn" id="voice-test">Meghallgatom</button></div>
         <span class="muted" id="voice-note" style="font-size:.88rem">Alapból a legjobb ingyenes hang szól. Microsoft Edge böngészőben fiatalos, természetes hangok is vannak (Libby, Maisie, Jenny), Chrome-ban a Google-hangok. Az OpenAI-hangok fizetősek.</span>
@@ -320,7 +341,12 @@ nav.tabs button{font-size:.75rem}
         </select>
       </div>
       <div class="field">
-        <div class="toggle"><input type="checkbox" id="voicemode"><label for="voicemode">Folyamatos hangos beszélgetés (Emma felolvas, utána magától hallgat, és amit mondasz, el is küldi)</label></div>
+        <label for="pause">Gondolkodási idő beszéd közben: <span id="pause-v">3.5</span> mp</label>
+        <input type="range" id="pause" min="1.5" max="8" step="0.5" value="3.5">
+        <span class="muted" style="font-size:.88rem">Ennyi csend után veszem úgy, hogy befejezted. Ha a szavadba vágok, növeld. Ha végeztél, nem kell kivárnod: koppints a ✓ (Kész) gombra, vagy mondd a mondat végén, hogy „kész” vagy „over”, és azonnal küldöm.</span>
+      </div>
+      <div class="field">
+        <div class="toggle"><input type="checkbox" id="voicemode"><label for="voicemode">Folyamatos hangos beszélgetés (Mira felolvas, utána magától hallgat, és amit mondasz, el is küldi)</label></div>
       </div>
       <div class="field">
         <div class="toggle"><input type="checkbox" id="strict"><label for="strict">Apró hibákat is javítson</label></div>
@@ -338,17 +364,18 @@ nav.tabs button{font-size:.75rem}
         <textarea id="io" rows="3" hidden style="font:inherit;font-size:.8rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px;margin-top:6px"></textarea>
       </div>
       <p class="note" id="store-note">Az előrehaladásod mentése…</p>
-      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-02 / 15</p>
+      <p class="muted" style="font-size:.85rem;text-align:center;margin-top:14px">Verzió: 2026-11-20 / 24</p>
     </section>
   </main>
 
   <div id="composer-wrap">
     <div class="hf-bar pad" id="hf-bar" hidden><span>Kihangosított mód. Mondd: „stop”, ha befejeznéd.</span><button class="btn" id="hf-stop">Leállítás</button></div>
+    <div class="listen-bar pad" id="listen-bar" hidden><span id="listen-txt">Hallgatlak… Nyugodtan gondolkodj. Ha befejezted, koppints a ✓ gombra, vagy mondd a végén: „kész”.</span><div class="lb-track" title="Ha megtelik, elküldöm"><div class="lb-fill" id="lb-fill"></div></div></div>
     <div class="composer pad" id="composer">
       <button class="round mic" id="mic" aria-label="Beszéd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
       <textarea id="input" rows="1" placeholder="Írj angolul, vagy kérdezz magyarul…" aria-label="Üzenet"></textarea>
       <button class="round help" id="help" aria-label="Segíts" title="Segíts, elakadtam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg></button>
-      <button class="round send" id="send" aria-label="Küldés"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <button class="round send" id="send" aria-label="Küldés / Kész"><svg class="i-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><svg class="i-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </div>
   </div>
 
@@ -364,13 +391,20 @@ nav.tabs button{font-size:.75rem}
 <script>
 const SCENARIOS = [
   {id:"free", hu:"Szabad beszélgetés", en:"a friendly free conversation about the learner's life, hobbies and day"},
-  {id:"arch-client", hu:"Építész: Ügyféltárgyalás", pro:true, en:"an architect's first meeting with a client about their brief, budget, schedule and wishes for a new house or building (you are the client)"},
-  {id:"arch-fee", hu:"Építész: Díjtárgyalás", pro:true, nego:true, en:"negotiating the architect's design fee, scope of services, payment stages and contract terms with a client who wants a lower price (you are the client; push back politely and make counter-offers)"},
-  {id:"arch-contractor", hu:"Építész: Kivitelezői alku", pro:true, nego:true, en:"negotiating with a building contractor about their tender price, extra costs for design changes, deadlines and penalties (you are the contractor; defend your price and ask for concessions)"},
-  {id:"arch-present", hu:"Építész: Tervbemutatás", pro:true, en:"the architect presenting a design concept to the client (you are the client asking about layout, floor plans, materials, daylight, energy efficiency and cost)"},
-  {id:"arch-site", hu:"Építész: Helyszíni bejárás", pro:true, en:"a construction site visit with the site manager discussing progress, defects, delays and the schedule (you are the site manager)"},
-  {id:"arch-team", hu:"Építész: Tervezői egyeztetés", pro:true, en:"a design coordination meeting with structural and MEP engineers about drawings, clashes, revisions and deadlines (you are the structural engineer)"},
-  {id:"arch-permit", hu:"Építész: Engedélyezés", pro:true, en:"talking with a planning officer about the building permit, zoning rules, fire safety and accessibility requirements (you are the planning officer)"},
+  {id:"beauty-client", tag:"beauty", hu:"Kozmetikus: Vendégkonzultáció", pro:true, en:"a beauty therapist's first consultation with a new client about her skin type, skin problems, wishes and the right electro-cosmetic treatment (you are the client; ask questions about the devices, price and how many sessions are needed)"},
+  {id:"beauty-treat", tag:"beauty", hu:"Kozmetikus: Kezelés közben", pro:true, en:"during a facial with radiofrequency, microcurrent or ultrasound: the beauty therapist explains each step, checks how the client feels, and gives aftercare advice (you are the client)"},
+  {id:"org-event", tag:"org", hu:"Szervezés: Rendezvény", en:"organising an event (a family day, a charity ball or a birthday party): calling a venue or a supplier about dates, prices, catering and what is included (you are the venue manager or supplier)"},
+  {id:"kinder-meeting", tag:"family", hu:"Óvoda: Szülői értekezlet", en:"a kindergarten parents' meeting led by the learner, who is the chair of the parents' association: agenda, collecting money, planning the next event, volunteers (you are another parent with questions and opinions)"},
+  {id:"kinder-teacher", tag:"family", hu:"Óvoda: Az óvónővel", en:"a chat with the kindergarten teacher at pick-up time about how the child's day went, eating, sleeping, friends and upcoming events (you are the teacher)"},
+  {id:"baby", tag:"family", hu:"Babázás: Játszótéren", en:"meeting another parent at the playground and talking about babies and toddlers: sleep, food, first words, health visitor, maternity leave (you are the other parent)"},
+  {id:"culture", hu:"Kultúrák, szokások", en:"a friendly conversation about cultures, customs and traditions: festivals, food, manners and travel experiences in different countries (you are a curious foreign friend; compare your customs with Hungarian ones)"},
+  {id:"arch-client", tag:"arch", hu:"Építész: Ügyféltárgyalás", pro:true, en:"an architect's first meeting with a client about their brief, budget, schedule and wishes for a new house or building (you are the client)"},
+  {id:"arch-fee", tag:"arch", hu:"Építész: Díjtárgyalás", pro:true, nego:true, en:"negotiating the architect's design fee, scope of services, payment stages and contract terms with a client who wants a lower price (you are the client; push back politely and make counter-offers)"},
+  {id:"arch-contractor", tag:"arch", hu:"Építész: Kivitelezői alku", pro:true, nego:true, en:"negotiating with a building contractor about their tender price, extra costs for design changes, deadlines and penalties (you are the contractor; defend your price and ask for concessions)"},
+  {id:"arch-present", tag:"arch", hu:"Építész: Tervbemutatás", pro:true, en:"the architect presenting a design concept to the client (you are the client asking about layout, floor plans, materials, daylight, energy efficiency and cost)"},
+  {id:"arch-site", tag:"arch", hu:"Építész: Helyszíni bejárás", pro:true, en:"a construction site visit with the site manager discussing progress, defects, delays and the schedule (you are the site manager)"},
+  {id:"arch-team", tag:"arch", hu:"Építész: Tervezői egyeztetés", pro:true, en:"a design coordination meeting with structural and MEP engineers about drawings, clashes, revisions and deadlines (you are the structural engineer)"},
+  {id:"arch-permit", tag:"arch", hu:"Építész: Engedélyezés", pro:true, en:"talking with a planning officer about the building permit, zoning rules, fire safety and accessibility requirements (you are the planning officer)"},
   {id:"smalltalk", hu:"Ismerkedés", en:"meeting someone new at a party and making small talk"},
   {id:"cafe", hu:"Kávézó, étterem", en:"ordering food and drinks in a café or restaurant (you are the waiter)"},
   {id:"travel", hu:"Utazás, reptér", en:"travelling: airport check-in, hotel reception and asking for directions (you play the staff)"},
@@ -389,7 +423,7 @@ const LEVEL_DESC = {
 
 /* ---------- state ---------- */
 const defaultState = () => ({
-  settings:{level:"A2", accent:"en-US", rate:0.9, autoread:true, strict:false, scenario:"free", model:"claude-opus-5-5", voicemode:false},
+  settings:{level:"A2", accent:"en-US", rate:0.9, autoread:true, strict:false, scenario:"free", model:"claude-opus-5-5", voicemode:false, pause:3.5},
   chats:{}, // scenario -> [{role, content, fb?, words?}]
   vocab:[], // {en, hu, example, box, due, added}
   days:[],  // ISO dates practiced
@@ -398,8 +432,21 @@ let S = defaultState();
 let store = null; // {save(obj)}
 const $ = id => document.getElementById(id);
 
-function lsGet(){ try{ return JSON.parse(localStorage.getItem("bsz-state")||"null"); }catch(e){ return null; } }
-function lsSet(o){ try{ localStorage.setItem("bsz-state", JSON.stringify(o)); }catch(e){} }
+/* ---------- profiles: each one has its own saved state; the API key is shared ---------- */
+function lsJSON(k, d){ try{ const v = JSON.parse(localStorage.getItem(k)||"null"); return v===null ? d : v; }catch(e){ return d; } }
+function profiles(){ const l = lsJSON("bsz-profiles", null); return Array.isArray(l) && l.length ? l : [{id:"main", name:"Én"}]; }
+function setProfiles(l){ try{ localStorage.setItem("bsz-profiles", JSON.stringify(l)); }catch(e){} }
+let profId = (()=>{ try{ const id = localStorage.getItem("bsz-profile"); return profiles().some(p=>p.id===id) ? id : "main"; }catch(e){ return "main"; } })();
+const stateKey = id => id==="main" ? "bsz-state" : "bsz-state-"+id;
+function lsGet(){
+  const o = lsJSON(stateKey(profId), null);
+  // the first profile existed before profiles did: it belongs to the architect
+  if(profId==="main" && o && o.settings && o.settings.job===undefined) o.settings.job = "építész";
+  return o;
+}
+function lsSet(o){ try{ localStorage.setItem(stateKey(profId), JSON.stringify(o)); }catch(e){} }
+function profName(){ const p = profiles().find(p=>p.id===profId); return p ? p.name : "Én"; }
+function jobEn(){ const j = (S.settings.job||"").trim(); return j ? j : ""; }
 function merge(o){ const d=defaultState(); if(!o) return d; return {...d, ...o, settings:{...d.settings, ...(o.settings||{})}}; }
 
 let saveTimer=null;
@@ -485,16 +532,29 @@ function fillOai(){
   sel.innerHTML = oaiModels.map(id=>`<option value="${esc(id)}">${esc(id)}</option>`).join("");
   sel.value = cur;
 }
-let oaiNoEffort = false;
-async function oaiCall(key, model, messages, onText, stream){
+// Thinking time is the biggest delay before Mira answers. For the conversation we ask for the
+// least thinking the model accepts ("none", then "minimal", then "low"), and remember what worked.
+const EFFORT_FAST = ["none","minimal","low",""], EFFORT_NORMAL = ["low",""];
+function effortStart(ladder, model){ try{ const v = localStorage.getItem("bsz-effort-"+ladder[0]+"-"+model); if(v!==null && ladder.includes(v)) return ladder.indexOf(v); }catch(e){} return 0; }
+async function oaiCall(key, model, messages, onText, stream, fast){
   const go = extra => fetch("https://api.openai.com/v1/chat/completions", {
     method:"POST",
     headers:{"Content-Type":"application/json", "Authorization":"Bearer "+key},
     body: JSON.stringify(Object.assign({model, messages, stream, max_completion_tokens:4000}, extra))
   });
-  let res = await go(oaiNoEffort ? {} : {reasoning_effort:"low"});
-  if(!oaiNoEffort && res.status===400){ oaiNoEffort = true; res = await go({}); }
-  if(!res.ok){ let m=""; try{ m=(await res.json()).error.message; }catch(_){} throw oaiError(res.status, m); }
+  const ladder = fast ? EFFORT_FAST : EFFORT_NORMAL;
+  let i = effortStart(ladder, model), res, errMsg = null;
+  for(;;){
+    res = await go(ladder[i] ? {reasoning_effort:ladder[i]} : {});
+    errMsg = null;
+    if(res.status===400 && ladder[i]){
+      try{ errMsg = (await res.json()).error.message || ""; }catch(_){ errMsg = ""; }
+      if(/reasoning|effort|unsupported|not supported|invalid value/i.test(errMsg) && i < ladder.length-1){ i++; continue; }
+    }
+    break;
+  }
+  if(res.ok){ try{ localStorage.setItem("bsz-effort-"+ladder[0]+"-"+model, ladder[i]); }catch(e){} }
+  if(!res.ok){ let m = errMsg || ""; if(errMsg===null){ try{ m=(await res.json()).error.message; }catch(_){} } throw oaiError(res.status, m); }
   if(!stream){ const j = await res.json(); const t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || ""; if(onText && t) onText({text:t}); return t; }
   const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", text = "";
   for(;;){
@@ -516,10 +576,11 @@ function makeOaiRun(key){
     const model = S.settings.oaiModel;
     if(!model) throw {code:"model", message:"Válassz modellt a Beállításokban."};
     let text;
-    try{ text = await oaiCall(key, model, messages, opts.onText, true); }
+    const fast = !opts.modelTier || opts.modelTier==="quick"; // conversation, translation, help: answer fast
+    try{ text = await oaiCall(key, model, messages, opts.onText, true, fast); }
     catch(e){
       if(!e || !e.code){ throw {code:"network", message:String((e && e.message)||"")}; }
-      if(e.code==="invalid_request" && /stream/i.test(e.message)) text = await oaiCall(key, model, messages, opts.onText, false);
+      if(e.code==="invalid_request" && /stream/i.test(e.message)) text = await oaiCall(key, model, messages, opts.onText, false, fast);
       else throw e;
     }
     if(!text) throw {code:"empty_completion", message:""};
@@ -600,10 +661,10 @@ function renderKeyState(){
 function instructions(){
   const sc = SCENARIOS.find(s=>s.id===S.settings.scenario)||SCENARIOS[0];
   const lv = S.settings.level;
-  return `You are Emma, a warm, encouraging English conversation tutor for a Hungarian native speaker.
+  return `You are Mira, a warm, encouraging English conversation tutor for a Hungarian native speaker. (Your name used to be Emma; if the learner calls you Emma, just carry on as Mira.)
 Learner level: ${lv} (${LEVEL_DESC[lv]}). Adapt your vocabulary and sentence length to this level.
-The learner works as an architect.
-Scenario: ${sc.en}. Stay in this scenario and keep the conversation moving.${sc.pro ? "\nThis is professional English practice: use realistic architecture and construction terminology (adapted to the learner's level), and prefer professional terms in the words list." : ""}${sc.nego ? "\nThis is a negotiation: be a realistic, firm but polite counterpart. Do not give in too easily; make the learner justify their position, propose compromises and close the deal. In the correction explanation, also point out when a phrase sounds too direct or too weak for a negotiation and suggest a more diplomatic or more confident wording." : ""}
+${jobEn() ? `The learner's job and interests (as they wrote it, possibly in Hungarian): ${jobEn()}. Where it fits, bring in situations and vocabulary from this job.` : ""}
+Scenario: ${sc.en}. Stay in this scenario and keep the conversation moving.${sc.pro ? "\nThis is professional English practice: use realistic professional terminology of this field (adapted to the learner's level), and prefer professional terms in the words list." : ""}${sc.nego ? "\nThis is a negotiation: be a realistic, firm but polite counterpart. Do not give in too easily; make the learner justify their position, propose compromises and close the deal. In the correction explanation, also point out when a phrase sounds too direct or too weak for a negotiation and suggest a more diplomatic or more confident wording." : ""}
 
 Rules for your spoken reply:
 - Reply in English only, 1-3 short sentences, like a real spoken conversation.
@@ -627,7 +688,7 @@ function buildInput(history){
   // history: [{role,content}] beginning with assistant opener
   let h = history.slice(-16);
   const msgs = [{role:"user", content: instructions() + "\n\nStart the conversation now with a short greeting and an opening question."}];
-  if(h.length && h[0].role==="user") msgs.push({role:"assistant", content:"REPLY: Hi, I'm Emma! How are you today?"});
+  if(h.length && h[0].role==="user") msgs.push({role:"assistant", content:"REPLY: Hi, I'm Mira! How are you today?"});
   h.forEach((m,i)=>{
     const last = i===h.length-1;
     msgs.push({role:m.role, content: (m.role==="user" && last) ? `Learner${m.spoken ? " (spoken, transcribed by speech recognition)" : ""}: ${m.content}\n\n(${m.spoken ? "This message was spoken aloud. Ignore missing punctuation and capitalisation. If a word looks misrecognised in a way that suggests a pronunciation problem, mention it briefly in explanation_hu with a tip on how to pronounce it. " : ""}Answer in the exact REPLY / @@@ / JSON format.)` : m.content});
@@ -654,14 +715,15 @@ const chatOf = () => (S.chats[S.settings.scenario] ||= []);
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 function renderScen(){
-  $("scen").innerHTML = SCENARIOS.map(s=>`<button class="chip" data-s="${s.id}" aria-pressed="${s.id===S.settings.scenario}">${esc(s.hu)}</button>`).join("");
+  if(!tagOk((SCENARIOS.find(s=>s.id===S.settings.scenario)||{}).tag)) S.settings.scenario = "free";
+  $("scen").innerHTML = SCENARIOS.filter(s=>tagOk(s.tag)).map(s=>`<button class="chip" data-s="${s.id}" aria-pressed="${s.id===S.settings.scenario}">${esc(s.hu)}</button>`).join("");
 }
 function renderChat(){
   const box = $("chat"); box.innerHTML = "";
   const c = chatOf();
   if(!c.length){
     const p = document.createElement("div"); p.className="msg tutor";
-    p.innerHTML = `Szia! Én Emma vagyok, az angoltanárod. Válassz fent egy témát, és nyomd meg a gombot, hogy elkezdjük. Írhatsz vagy beszélhetsz is, a hibáidat pedig minden üzenet után kijavítom.<div class="tools"><button class="btn primary" id="start" style="flex:0 0 auto">Kezdjük!</button>${S.levelTested ? "" : `<button class="btn" id="start-test" style="flex:0 0 auto">Előbb felmérem a szintem</button>`}</div>`;
+    p.innerHTML = `Szia! Én Mira vagyok, az angoltanárod. Válassz fent egy témát, és nyomd meg a gombot, hogy elkezdjük. Írhatsz vagy beszélhetsz is, a hibáidat pedig minden üzenet után kijavítom.<div class="tools"><button class="btn primary" id="start" style="flex:0 0 auto">Kezdjük!</button>${S.levelTested ? "" : `<button class="btn" id="start-test" style="flex:0 0 auto">Előbb felmérem a szintem</button>`}</div>`;
     box.appendChild(p);
     $("start").onclick = () => ask();
     const st = $("start-test"); if(st) st.onclick = () => show("test");
@@ -670,10 +732,10 @@ function renderChat(){
   c.forEach((m,idx)=>{
     if(m.role==="user"){
       box.insertAdjacentHTML("beforeend", `<div class="msg me">${esc(m.content)}${m.clarity ? `<br><span class="clar">🎙 Érthetőség: ${m.clarity}% · ${clarityLabel(m.clarity)}</span>` : ""}</div>`);
-      if(m.answer) box.insertAdjacentHTML("beforeend", `<div class="fb" style="align-self:flex-start"><b>Emma magyarul:</b> ${esc(m.answer)}</div>`);
+      if(m.answer) box.insertAdjacentHTML("beforeend", `<div class="fb" style="align-self:flex-start"><b>Mira magyarul:</b> ${esc(m.answer)}</div>`);
       if(m.fb!==undefined && !(m.answer && m.fb===null)) box.insertAdjacentHTML("beforeend", fbHtml(m.fb));
     }else{
-      box.insertAdjacentHTML("beforeend", `<div class="msg tutor">${esc(m.content)}<div class="tools"><button class="icon-btn" data-say="${idx}">🔊 Meghallgatom</button><button class="icon-btn" data-tr="${idx}">Fordítás</button></div><div class="hu-tr muted" id="tr-${idx}" hidden></div></div>`);
+      box.insertAdjacentHTML("beforeend", `<div class="msg tutor">${esc(m.content)}<div class="tools"><button class="icon-btn" data-say="${idx}">🔊 Meghallgatom</button><button class="icon-btn" data-tr="${idx}">Fordítás</button>${m.ms ? `<span class="muted" style="font-size:.75rem;margin-left:auto" title="Ennyi idő alatt kezdett el válaszolni Mira">⏱ ${(m.ms/1000).toFixed(1).replace(".",",")} mp</span>` : ""}</div><div class="hu-tr muted" id="tr-${idx}" hidden></div></div>`);
       if(m.words && m.words.length) box.insertAdjacentHTML("beforeend", `<div class="words">${m.words.map(w=>`<span class="word-pill">+ ${esc(w.en)} = ${esc(w.hu)}</span>`).join("")}</div>`);
     }
   });
@@ -696,36 +758,48 @@ async function ask(){
     scrollDown(); return;
   }
   busy = true; setBusy();
+  const t0 = performance.now(); let tFirst = 0;
   const c = chatOf();
   if(!c.length) box.innerHTML = "";
-  const bubble = document.createElement("div"); bubble.className="msg tutor typing"; bubble.textContent="Emma gépel…";
+  const bubble = document.createElement("div"); bubble.className="msg tutor typing"; bubble.textContent="Mira gépel…";
   box.appendChild(bubble); scrollDown();
   const asText = v => typeof v==="string" ? v : (v && typeof v.text==="string") ? v.text : "";
-  let earlyP = null;
+  let earlyP = null, spokenUpTo = 0, replyDone = false;
+  const speakRest = (full) => {
+    // queue whatever part of the reply has not been spoken yet
+    const rest = full.slice(spokenUpTo).trim(); spokenUpTo = full.length;
+    if(!rest) return;
+    if(!earlyP){ stopSpeaking(); earlyP = speakP(rest, S.settings.accent, S.settings.rate); return; }
+    prefetchEN(rest);
+    const g = speakGen; earlyP = earlyP.then(()=> g===speakGen ? speakP(rest, S.settings.accent, S.settings.rate) : null);
+  };
   try{
     const res = await sample(buildInput(c.map(m=>({role:m.role, content:String(m.content||""), spoken:!!m.spoken}))), {
       cache:false,
-      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r){ bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); }
-        // the spoken reply is complete once the feedback marker arrives: start talking while the corrections are still streaming
-        if(!earlyP && r && t.indexOf("@@@")>=0 && (handsOn() || S.settings.autoread)){ stopSpeaking(); earlyP = speakP(r, S.settings.accent, S.settings.rate); }
+      onText:(ev)=>{ try{ const t = asText(ev); if(!t || /^Thinking/i.test(t)) return; const r = splitOut(t).reply; if(r && !/^R(E(P(L(Y)?)?)?)?$/i.test(r)){ if(!tFirst) tFirst = performance.now()-t0; bubble.classList.remove("typing"); bubble.textContent = r; scrollDown(); }
+        if(!r || replyDone || !(handsOn() || S.settings.autoread)) return;
+        if(t.indexOf("@@@")>=0){ replyDone = true; speakRest(r); return; } // reply complete: speak the rest while the corrections stream
+        // start talking as soon as the first sentence is complete, instead of waiting for the whole answer
+        if(!earlyP){ const m = r.match(/^[\s\S]*?[.!?](?=\s+["'A-Z])/); if(m && m[0].length >= 2){ stopSpeaking(); spokenUpTo = m[0].length; earlyP = speakP(m[0], S.settings.accent, S.settings.rate); } }
       }catch(_){} }
     });
     const text = asText(res);
     const {reply, fb} = splitOut(text);
+    if(earlyP && !replyDone){ replyDone = true; speakRest(reply); }
     const lastUser = c[c.length-1];
     if(lastUser && lastUser.role==="user"){
       lastUser.fb = fb ? ((fb.correction && fb.correction.corrected) ? fb.correction : null) : "err";
       if(fb && fb.answer_hu) lastUser.answer = String(fb.answer_hu);
     }
     const words = (fb && Array.isArray(fb.words)) ? fb.words.filter(w=>w&&w.en&&w.hu).slice(0,2).map(w=>({en:String(w.en), hu:String(w.hu), example:String(w.example||"")})) : [];
-    c.push({role:"assistant", content: reply || "Sorry, could you say that again?", words});
+    c.push({role:"assistant", content: reply || "Sorry, could you say that again?", words, ms: Math.round(tFirst || (performance.now()-t0))});
     addWords(words);
     markDay();
     save();
     renderChat();
     const huAns = fb && fb.answer_hu ? String(fb.answer_hu) : "";
-    const thenHu = () => huAns ? speakP(huAns, "hu-HU", 1) : null; // read Emma's Hungarian answer / translation aloud too
-    if(handsOn()){ const g = speakGen; (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=> g===speakGen ? thenHu() : null).then(()=>{ if(handsOn() && !$("v-chat").hidden) listen(true); }); }
+    const thenHu = () => huAns ? speakP(huAns, "hu-HU", 1) : null; // read Mira's Hungarian answer / translation aloud too
+    if(handsOn()){ const g = speakGen; (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=> g===speakGen ? thenHu() : null).then(()=>{ idleRestarts = 0; if(handsOn() && !$("v-chat").hidden) setTimeout(()=>{ if(!recOn) listen(true); }, 150); }); }
     else if(S.settings.autoread){ const g = speakGen; if(!earlyP){ stopSpeaking(); } const g2 = speakGen; (earlyP || speakP(reply, S.settings.accent, S.settings.rate)).then(()=>{ if(speakGen===g2 || speakGen===g) thenHu(); }); }
   }catch(e){
     bubble.remove();
@@ -819,20 +893,26 @@ function pickTtsModel(){
   ids.sort((x,y)=>y.localeCompare(x, undefined, {numeric:true})); // newest first
   return ids.find(id=>!/^tts-1/.test(id) && !/mini/.test(id)) || ids.find(id=>!/^tts-1/.test(id)) || ids.find(id=>/hd/.test(id)) || ids[0] || "tts-1";
 }
-async function oaiTTS(text, voice, rate){
-  const key = oaiKey(); const model = pickTtsModel(); const gen = speakGen;
-  rate = 1; // OpenAI voices sound most natural at their own pace; slowing them down makes them drag
+function oaiTtsUrl(text, voice){
+  const key = oaiKey(); const model = pickTtsModel(); const rate = 1; // OpenAI voices sound most natural at their own pace
   const ck = model+"|"+voice+"|"+rate+"|"+text;
-  let url = ttsCache.get(ck);
-  if(!url){
-    const body = {model, voice, input:text, speed: Math.max(0.25, Math.min(4, rate||1))};
+  if(ttsCache.has(ck)) return ttsCache.get(ck);
+  const p = (async()=>{
+    const body = {model, voice, input:text, speed: 1};
     if(!/^tts-1/.test(model)) body.instructions = "Voice: a warm, pleasant, natural-sounding woman in her early thirties, a kind English tutor. Affect: calm, friendly and genuinely human, never robotic. Tone: soft and reassuring. Pacing: relaxed, clear articulation with natural pauses.";
     let r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)});
     if(!r.ok && r.status===400 && body.instructions){ delete body.instructions; r = await fetch("https://api.openai.com/v1/audio/speech", {method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+key}, body:JSON.stringify(body)}); }
     if(!r.ok) throw new Error("tts "+r.status);
-    url = URL.createObjectURL(await r.blob());
-    ttsCache.set(ck, url); if(ttsCache.size > 40){ const k = ttsCache.keys().next().value; URL.revokeObjectURL(ttsCache.get(k)); ttsCache.delete(k); }
-  }
+    return URL.createObjectURL(await r.blob());
+  })();
+  ttsCache.set(ck, p); p.catch(()=>ttsCache.delete(ck));
+  if(ttsCache.size > 40){ const k = ttsCache.keys().next().value; const old = ttsCache.get(k); ttsCache.delete(k); old.then(u=>URL.revokeObjectURL(u), ()=>{}); }
+  return p;
+}
+function prefetchEN(text){ const vc = voiceChoice(); if(text && vc.startsWith("openai:") && oaiKey()) oaiTtsUrl(text, vc.slice(7)).catch(()=>{}); }
+async function oaiTTS(text, voice, rate){
+  const gen = speakGen;
+  const url = await oaiTtsUrl(text, voice);
   if(gen !== speakGen) return; // stopped or replaced while loading: never play two voices at once
   try{ if(curAudio){ curAudio.pause(); } }catch(e){}
   await new Promise(res=>{
@@ -873,7 +953,7 @@ function say(text){ if(!text) return; stopSpeaking(); speakEN(text, S.settings.r
 let rec = null, recOn = false;
 function micHint(msg){
   if(hf.on) stopHandsFree(false);
-  recWanted = false; clearTimeout(recTimer);
+  recWanted = false; clearTimeout(recTimer); clearInterval(lbTimer); listenUI(false); sendNow = false;
   try{ rec && rec.abort(); }catch(e){}
   recOn=false; $("mic").classList.remove("on");
   $("chat").insertAdjacentHTML("beforeend", `<div class="err">${esc(msg || "A mikrofont nem sikerült elindítani. Engedélyezd a mikrofont a böngészőben (a címsor melletti lakat ikon), vagy nyisd meg az appot Chrome-ban.")}</div>`);
@@ -881,39 +961,66 @@ function micHint(msg){
 }
 // Listening keeps going across short pauses: the browser ends each recognition
 // session after a pause, so we restart it and keep what was already recognised.
-// It stops when you tap the mic again, or after a longer silence.
-const SILENCE_MS = 4000, FIRST_WORD_MS = 10000, OAI_SILENCE_MS = 2200;
-let recWanted = false, recTimer = null;
+// It ends after the "thinking time" of silence (Settings), when you tap ✓ (Kész),
+// or right away when you finish with the word "kész" / "over".
+const FIRST_WORD_MS = 12000, SPEC_MS = 900;
+const pauseMs = () => Math.round(1000 * Math.min(8, Math.max(1.5, +S.settings.pause || 3.5)));
+const END_RE = /(?:^|[\s,.;:!?-])(?:over|kész|kesz|kés|küldés|kuldes|küldd|send it)[\s.!?,]*$/i;
+const stripEnd = t => String(t).replace(END_RE, "").trim();
+let sendNow = false, transcribing = false;
+function listenUI(on){
+  $("listen-bar").hidden = !on; $("composer").classList.toggle("rec", !!on);
+  if(!on) $("lb-fill").style.width = "0";
+}
+function lbFill(f){ $("lb-fill").style.width = Math.max(0, Math.min(1, f))*100 + "%"; }
+function sendOrDone(){
+  if(recOn){ sendNow = true; if(mrec) stopRecording(); else stopListening(); return; }
+  if(transcribing){ sendNow = true; return; }
+  send();
+}
+let recWanted = false, recTimer = null, lbTimer = null;
 function stopListening(){ recWanted = false; clearTimeout(recTimer); try{ rec && rec.stop(); }catch(e){} }
 function startListening(auto){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ micHint("Ez a böngésző nem támogatja a beszédfelismerést. Nyisd meg az appot Chrome-ban."); return; }
   if(recOn || busy) return;
   let committed = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
-  const cs = []; let quick = 0;
+  const cs = []; let quick = 0, ended = false, heard = 0;
+  sendNow = false;
   const arm = ms => { clearTimeout(recTimer); recTimer = setTimeout(stopListening, ms); };
   const finish = () => {
-    recOn = false; recWanted = false; clearTimeout(recTimer);
+    if(ended && !recOn) return;
+    ended = true; recOn = false; recWanted = false; clearTimeout(recTimer); clearInterval(lbTimer); listenUI(false);
     $("mic").classList.remove("on"); $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
     $("input").value = committed.trim() ? committed.trim()+" " : $("input").value; autosize();
     if(cs.length) lastClarity = Math.round(100*cs.reduce((x,y)=>x+y,0)/cs.length);
-    if(!$("input").value.trim()){ if(hf.on && recOk) setTimeout(()=>{ if(hf.on) listen(true); }, 300); return; }
+    const go = sendNow; sendNow = false;
+    if(!$("input").value.trim()){ if(recOk && relisten()) return; if(handsOn()) micHint("Egy ideje nem hallottam semmit, ezért szüneteltetem a hallgatást. Koppints a mikrofonra, ha folytatnád."); return; }
     lastSpoken = true;
-    if(handsOn()){ $("input").value = $("input").value.trim(); if(!hfCommand($("input").value)) send(); }
+    idleRestarts = 0;
+    if(handsOn() || go){ $("input").value = $("input").value.trim(); if(!hfCommand($("input").value)) sendWhenFree(); }
   };
   const begin = () => {
     rec = new SR(); rec.lang = S.settings.accent; rec.interimResults = true;
     // desktop Chrome handles continuous mode well; on Android it duplicates text, so there we restart per phrase
     rec.continuous = !/Android/i.test(navigator.userAgent);
     rec.onresult = ev => {
+      if(ended) return;
       let interim = "";
       for(let i = ev.resultIndex; i < ev.results.length; i++){
         const r = ev.results[i];
         if(r.isFinal){ committed += r[0].transcript.trim() + " "; if(r[0].confidence > 0) cs.push(r[0].confidence); }
         else interim += r[0].transcript;
       }
+      const full = (committed + interim).trim();
+      if(END_RE.test(full)){
+        // "kész" / "over" at the end: send right away
+        committed = stripEnd(full) + " "; sendNow = true; recWanted = false; ended = true;
+        $("input").value = committed.trim(); autosize();
+        try{ rec.abort(); }catch(e){} ended = false; finish(); return;
+      }
       $("input").value = committed + interim; autosize();
-      arm(SILENCE_MS);
+      heard = Date.now(); arm(pauseMs());
     };
     rec.onerror = ev => {
       if(ev.error==="not-allowed" || ev.error==="service-not-allowed"){ recWanted=false; micHint(); }
@@ -924,19 +1031,21 @@ function startListening(auto){
     };
     const t0 = Date.now();
     rec.onend = () => {
+      if(ended) return;
       quick = (Date.now()-t0 < 400) ? quick+1 : 0;
       if(quick >= 5){ recWanted = false; finish(); micHint("A böngésző beépített beszédfelismerése itt nem működik. Válts a Beállításokban OpenAI beszédfelismerésre."); return; }
-      if(recWanted){ setTimeout(()=>{ if(!recWanted){ finish(); return; } try{ begin(); }catch(e){ finish(); } }, 250); return; }
+      if(recWanted){ setTimeout(()=>{ if(!recWanted){ finish(); return; } try{ begin(); }catch(e){ finish(); } }, 150); return; }
       finish();
     };
     rec.start();
   };
   try{
-    recWanted = true; recOn = true; $("mic").classList.add("on");
-    $("input").placeholder = "Hallgatlak… koppints újra a mikrofonra, ha befejezted.";
+    recWanted = true; recOn = true; $("mic").classList.add("on"); listenUI(true);
+    $("input").placeholder = "Hallgatlak…";
     arm(FIRST_WORD_MS);
+    clearInterval(lbTimer); lbTimer = setInterval(()=>{ if(!recOn){ clearInterval(lbTimer); return; } lbFill(heard ? (Date.now()-heard)/pauseMs() : 0); }, 100);
     begin();
-  }catch(e){ recWanted = false; micHint(); }
+  }catch(e){ recWanted = false; listenUI(false); micHint(); }
 }
 function toggleMic(){
   if(recOn){ if(mrec) stopRecording(); else stopListening(); return; }
@@ -947,10 +1056,25 @@ function toggleMic(){
 const hf = {on:false, wake:null};
 let recOk = true;
 function handsOn(){ return hf.on || S.settings.voicemode; }
+// In hands-free / continuous voice mode the mic must come back by itself after a silent round
+// (nobody spoke within 12 s, or only "over" was heard). After ~1 minute of silence we pause.
+let idleRestarts = 0;
+function relisten(){
+  if(!handsOn() || $("v-chat").hidden || idleRestarts >= 5) { idleRestarts = 0; return false; }
+  idleRestarts++;
+  setTimeout(()=>{ if(handsOn() && !$("v-chat").hidden && !recOn) listen(true); }, 300);
+  return true;
+}
+// If Mira is still busy when your words arrive, wait for her instead of dropping the message.
+function sendWhenFree(tries){
+  tries = tries || 0;
+  if(!busy){ send(); return; }
+  if(tries < 150) setTimeout(()=>sendWhenFree(tries+1), 200);
+}
 function hfCommand(t){
   if(!hf.on) return false;
   const w = String(t).toLowerCase().replace(/[^a-záéíóöőúüű ]/g," ").trim();
-  if(/^(stop|stopp|vége|vege|állj|allj|leállítás|befejeztem|that s all|bye|goodbye|bye emma|goodbye emma)( emma)?( stop)?$/.test(w)){
+  if(/^(stop|stopp|vége|vege|állj|allj|leállítás|befejeztem|that s all|bye|goodbye|bye mira|goodbye mira|bye emma|goodbye emma)( mira| emma)?( stop)?$/.test(w)){
     $("input").value = ""; autosize(); stopHandsFree(true); return true;
   }
   return false;
@@ -985,6 +1109,24 @@ function pickTranscribeModel(){
   const ids = (oaiAllIds || []).filter(id=>!/realtime|diariz|preview/.test(id));
   return ids.find(id=>/transcribe$/.test(id) && !/mini/.test(id)) || ids.find(id=>/transcribe/.test(id) && !/diariz/.test(id)) || "whisper-1";
 }
+// One transcription request; tries the best model first and falls back to older ones.
+async function oaiTranscribe(blob, blobType){
+  const ext = /mp4/.test(blobType) ? "m4a" : /ogg/.test(blobType) ? "ogg" : "webm";
+  const models = [...new Set([sttModelOk || pickTranscribeModel(), "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"])];
+  let r = null, lastErr = null;
+  for(const model of models){
+    const fd = new FormData();
+    fd.append("file", blob, "speech."+ext);
+    fd.append("model", model);
+    if(!/diariz/.test(model)) fd.append("prompt", "A Hungarian learner practising English conversation. Mostly English, sometimes Hungarian. The speaker may end with the word 'kész' or 'over'.");
+    r = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"Authorization":"Bearer "+oaiKey()}, body:fd});
+    if(r.ok){ sttModelOk = model; try{ localStorage.setItem("bsz-stt-model", model); }catch(e){} const j = await r.json(); return {ok:true, text:String(j.text||"").trim()}; }
+    let m=""; try{ m=(await r.json()).error.message; }catch(_){}
+    lastErr = oaiError(r.status, m);
+    if(r.status===401 || r.status===429) break;
+  }
+  return {ok:false, err:lastErr};
+}
 async function recordOpenAI(auto){
   if(recOn || busy) return;
   try{ mstream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}}); }
@@ -992,93 +1134,99 @@ async function recordOpenAI(auto){
   const type = ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].find(t=>{ try{ return MediaRecorder.isTypeSupported(t); }catch(_){ return false; } }) || "";
   const chunks = [];
   mrec = type ? new MediaRecorder(mstream, {mimeType:type}) : new MediaRecorder(mstream);
+  const recType = mrec.mimeType || type || "audio/webm";
   mrec.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
-  // silence detection
-  let spoke = false, lastLoud = Date.now(); const started = Date.now();
+  sendNow = false;
+  // silence detection + "speculative" transcription: at every short pause we already transcribe
+  // what was said so far. If you then stay silent, that text is ready the moment you finish,
+  // and if it ends with "kész" / "over" we send at once.
+  let spoke = false, lastLoud = Date.now(), spec = null; const started = Date.now();
   try{
     mctx = new (window.AudioContext || window.webkitAudioContext)();
     const src = mctx.createMediaStreamSource(mstream); const an = mctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
     const buf = new Float32Array(an.fftSize);
     const tick = () => {
-      if(!mrec || mrec.state==="inactive") return;
+      if(!mrec || mrec.state==="inactive"){ clearInterval(iv); return; }
       an.getFloatTimeDomainData(buf); let sum=0; for(const v of buf) sum += v*v; const rms = Math.sqrt(sum/buf.length);
       if(rms > 0.02){ spoke = true; lastLoud = Date.now(); }
       const now = Date.now();
-      if((spoke && now-lastLoud > OAI_SILENCE_MS) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 90000) stopRecording();
-      else requestAnimationFrame(tick);
+      lbFill(spoke ? (now-lastLoud)/pauseMs() : 0);
+      if(spoke && now-lastLoud > SPEC_MS && (!spec || spec.at !== lastLoud)){
+        const s = spec = {at:lastLoud, p:null};
+        try{ mrec.requestData(); }catch(_){}
+        setTimeout(()=>{
+          if(spec!==s || !chunks.length) return;
+          s.p = oaiTranscribe(new Blob(chunks.slice(), {type:recType}), recType).then(r=>r.ok ? r.text : null).catch(()=>null);
+          s.p.then(t=>{ if(t && spec===s && lastLoud===s.at && END_RE.test(t) && mrec && mrec.state!=="inactive"){ sendNow = true; clearInterval(iv); stopRecording(); } });
+        }, 120);
+      }
+      if((spoke && now-lastLoud > pauseMs()) || (!spoke && now-started > FIRST_WORD_MS) || now-started > 120000){ clearInterval(iv); stopRecording(); }
     };
-    requestAnimationFrame(tick);
+    const iv = setInterval(tick, 80);
   }catch(e){}
   mrec.onstop = async () => {
     try{ mstream.getTracks().forEach(t=>t.stop()); }catch(_){}
     try{ mctx && mctx.close(); }catch(_){}
-    const blobType = (mrec && mrec.mimeType) || type || "audio/webm";
-    mrec = null; recOn = false; $("mic").classList.remove("on");
-    if(!chunks.length || !spoke){ $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…"; if(hf.on){ setTimeout(()=>{ if(hf.on) listen(true); }, 300); return; } if(!spoke) micHint("Nem hallottam semmit. Ellenőrizd, hogy a jó mikrofon van-e kiválasztva, és beszélj hangosabban."); return; }
-    $("input").placeholder = "Szöveggé alakítom…";
+    mrec = null; recOn = false; $("mic").classList.remove("on"); listenUI(false);
+    if(!chunks.length || !spoke){ sendNow = false; $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…"; if(relisten()) return; if(!spoke) micHint(handsOn() ? "Egy ideje nem hallottam semmit, ezért szüneteltetem a hallgatást. Koppints a mikrofonra, ha folytatnád." : "Nem hallottam semmit. Ellenőrizd, hogy a jó mikrofon van-e kiválasztva, és beszélj hangosabban."); return; }
+    $("input").placeholder = "Szöveggé alakítom…"; transcribing = true;
     try{
-      const blob = new Blob(chunks, {type: blobType});
-      const ext = /mp4/.test(blobType) ? "m4a" : /ogg/.test(blobType) ? "ogg" : "webm";
-      // try the best model first; if this account rejects it (e.g. 404 Invalid URL), fall back to older ones
-      const models = [...new Set([sttModelOk || pickTranscribeModel(), "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"])];
-      let r = null, lastErr = null;
-      for(const model of models){
-        const fd = new FormData();
-        fd.append("file", blob, "speech."+ext);
-        fd.append("model", model);
-        if(!/diariz/.test(model)) fd.append("prompt", "A Hungarian architect practising English conversation. Mostly English, sometimes Hungarian.");
-        r = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"Authorization":"Bearer "+oaiKey()}, body:fd});
-        if(r.ok){ sttModelOk = model; try{ localStorage.setItem("bsz-stt-model", model); }catch(e){} break; }
-        let m=""; try{ m=(await r.json()).error.message; }catch(_){}
-        lastErr = oaiError(r.status, m);
-        if(r.status===401 || r.status===429) break;
-      }
-      if(!r || !r.ok){
-        // last resort: switch to the free browser recognition so the mic keeps working
-        if((window.SpeechRecognition || window.webkitSpeechRecognition) && !(lastErr && lastErr.code==="auth")){
-          S.settings.stt = "browser"; save(); try{ $("stt").value = "browser"; }catch(_){}
-          $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
-          micHint("Az OpenAI beszédfelismerés nem működött, átváltottam a böngésző ingyenes felismerésére. Nyomd meg újra a mikrofont.");
-          return;
+      let text = null;
+      // nothing new was said since the last pause: reuse the transcription that is already running
+      if(spec && spec.p && spec.at === lastLoud) text = await spec.p;
+      if(text === null){
+        const r = await oaiTranscribe(new Blob(chunks, {type:recType}), recType);
+        if(!r.ok){
+          const lastErr = r.err;
+          // last resort: switch to the free browser recognition so the mic keeps working
+          if((window.SpeechRecognition || window.webkitSpeechRecognition) && !(lastErr && lastErr.code==="auth")){
+            S.settings.stt = "browser"; save(); try{ $("stt").value = "browser"; }catch(_){}
+            $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
+            micHint("Az OpenAI beszédfelismerés nem működött, átváltottam a böngésző ingyenes felismerésére. Nyomd meg újra a mikrofont.");
+            return;
+          }
+          throw lastErr;
         }
-        throw lastErr;
+        text = r.text;
       }
-      const j = await r.json();
-      const text = String(j.text||"").trim();
       $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
-      if(!text){ micHint("Nem sikerült szöveget felismerni. Próbáld újra."); return; }
+      if(END_RE.test(text)){ sendNow = true; text = stripEnd(text); }
+      if(!text){ if(relisten()) return; micHint("Nem sikerült szöveget felismerni. Próbáld újra."); return; }
       const base = auto ? "" : ($("input").value ? $("input").value.trim()+" " : "");
       $("input").value = base + text; autosize();
       lastSpoken = true; lastClarity = null;
-      if(handsOn() && !hfCommand(text)) send();
+      idleRestarts = 0;
+      if((handsOn() || sendNow) && !hfCommand(text)) sendWhenFree();
     }catch(e){
       $("input").placeholder = "Írj angolul, vagy kérdezz magyarul…";
       micHint("A szöveggé alakítás nem sikerült" + (e && e.code==="auth" ? ": az OpenAI-kulcs nem érvényes." : e && e.code==="credit" ? ": elfogyott az OpenAI-egyenleg." : ". ") + (e && e.message ? " ("+String(e.message).slice(0,120)+")" : ""));
-    }
+    }finally{ transcribing = false; sendNow = false; }
   };
   mrec.start(250);
-  recOn = true; $("mic").classList.add("on");
-  $("input").placeholder = "Hallgatlak… koppints újra a mikrofonra, ha befejezted.";
+  recOn = true; $("mic").classList.add("on"); listenUI(true);
+  $("input").placeholder = "Hallgatlak…";
 }
 
 /* ---------- vocab (simple spaced repetition) ---------- */
 const BOX_DAYS = [0,1,3,7,16,35];
 const today = () => new Date().toISOString().slice(0,10);
 function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
-function addWords(ws){
+function addWords(ws, pack){
   ws.forEach(w=>{
     const key = w.en.trim().toLowerCase();
     if(S.vocab.some(v=>v.en.toLowerCase()===key)) return;
-    S.vocab.push({en:w.en.trim(), hu:w.hu.trim(), example:(w.example||"").trim(), box:0, due:today(), added:today()});
+    S.vocab.push(Object.assign({en:w.en.trim(), hu:w.hu.trim(), example:(w.example||"").trim(), box:0, due:today(), added:today()}, pack ? {pack} : {}));
   });
 }
 let flashShown = false, flashIdx = null;
-function dueList(){ const t=today(); return S.vocab.map((v,i)=>({v,i})).filter(x=>x.v.due<=t); }
+const inFilter = v => !S.settings.vfilter || v.pack===S.settings.vfilter;
+function dueList(){ const t=today(); return S.vocab.map((v,i)=>({v,i})).filter(x=>x.v.due<=t && inFilter(x.v)); }
 function renderVocab(){
   const due = dueList();
-  $("vocab-sub").textContent = S.vocab.length ? `${S.vocab.length} szó összesen, ma ${due.length} vár ismétlésre.` : "Még nincs szavad. Beszélgess Emmával, és a hasznos szavak ide kerülnek.";
+  $("vocab-sub").textContent = S.vocab.length ? `${S.vocab.length} szó összesen, ma ${due.length} vár ismétlésre.` : "Még nincs szavad. Beszélgess Mirával, és a hasznos szavak ide kerülnek.";
   const f = $("flash");
   if(!S.vocab.length){ f.innerHTML = ""; }
+  else if(!S.vocab.some(inFilter)){ f.innerHTML = `<div class="card"><div class="en">Ebből a csomagból még nincs szavad.</div><div class="muted">Válaszd ki fent a csomagot, és nyomd meg a „+10 szó” gombot.</div></div>`; }
   else if(!due.length){ f.innerHTML = `<div class="card"><div class="en">Kész vagy mára!</div><div class="muted">Holnap újabb szavak jönnek ismétlésre.</div></div>`; }
   else{
     if(flashIdx===null || !due.some(x=>x.i===flashIdx)){ flashIdx = due[0].i; flashShown=false; }
@@ -1094,7 +1242,8 @@ function renderVocab(){
       $("fyes").onclick=()=>grade(true); $("fno").onclick=()=>grade(false);
     } else $("fshow").onclick=()=>{ flashShown=true; renderVocab(); };
   }
-  $("vlist").innerHTML = S.vocab.slice().reverse().map((v)=>{
+  renderPackInfo();
+  $("vlist").innerHTML = S.vocab.slice().reverse().filter(inFilter).map((v)=>{
     const i = S.vocab.indexOf(v);
     return `<li><span class="w">${esc(v.en)}</span><span class="m">${esc(v.hu)}</span><span class="lvl">${"●".repeat(v.box)}${"○".repeat(5-v.box)}</span><button class="del" data-del="${i}" aria-label="Törlés">✕</button></li>`;
   }).join("");
@@ -1122,16 +1271,17 @@ function renderStreak(){
 function renderSettings(){
   const s=S.settings;
   $("level").value=s.level; $("accent").value=s.accent; $("rate").value=s.rate; $("rate-v").textContent=(+s.rate).toFixed(2);
-  $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); $("stt").value=sttEngine(); renderVoices(); renderKeyState();
+  $("pause").value=s.pause||3.5; $("pause-v").textContent=(+(s.pause||3.5)).toFixed(1); $("autoread").checked=s.autoread; $("strict").checked=s.strict; $("voicemode").checked=!!s.voicemode; $("model").value=s.model||"claude-opus-5-5"; $("provider").value=provider(); $("stt").value=sttEngine(); renderVoices(); renderKeyState();
 }
 ["level","accent"].forEach(id=>$(id).onchange=e=>{ S.settings[id]=e.target.value; save(); });
 $("rate").oninput=e=>{ S.settings.rate=+e.target.value; $("rate-v").textContent=(+e.target.value).toFixed(2); save(); };
 $("rate").onchange=()=>say("This is how fast I will speak.");
+$("pause").oninput=e=>{ S.settings.pause=+e.target.value; $("pause-v").textContent=(+e.target.value).toFixed(1); save(); };
 $("autoread").onchange=e=>{ S.settings.autoread=e.target.checked; save(); };
 $("voicemode").onchange=e=>{ S.settings.voicemode=e.target.checked; save(); };
 $("stt").onchange=e=>{ S.settings.stt=e.target.value; save(); };
-$("voice").onchange=e=>{ S.settings.voice=e.target.value; save(); say("Hi! I'm Emma. Shall we practise some English today?"); };
-$("voice-test").onclick=()=>say("Hi! I'm Emma. Shall we practise some English today?");
+$("voice").onchange=e=>{ S.settings.voice=e.target.value; save(); say("Hi! I'm Mira. Shall we practise some English today?"); };
+$("voice-test").onclick=()=>say("Hi! I'm Mira. Shall we practise some English today?");
 window.addEventListener("tts-fallback", e=>{ const n=$("voice-note"); if(n) n.textContent = "Az OpenAI-hang most nem szólalt meg ("+e.detail+"), ezért a böngésző hangját hallod. Ellenőrizd az OpenAI-kulcsot és az egyenleget."; });
 $("model").onchange=e=>{ S.settings.model=e.target.value; save(); };
 $("apikey-save").onclick=()=>{ const v=$("apikey").value.replace(/\s+/g,""); if(!v) return;
@@ -1178,7 +1328,7 @@ $("chat").onclick=e=>{
   const t=e.target.closest("[data-tr]"); if(t){ translate(+t.dataset.tr); }
 };
 $("vlist").onclick=e=>{ const d=e.target.closest("[data-del]"); if(!d) return; S.vocab.splice(+d.dataset.del,1); flashIdx=null; save(); renderVocab(); };
-$("send").onclick=send;
+$("send").onclick=sendOrDone;
 $("mic").onclick=toggleMic;
 function autosize(){ const t=$("input"); t.style.height="auto"; t.style.height=Math.min(120,t.scrollHeight)+"px"; }
 $("input").addEventListener("input",autosize);
@@ -1258,25 +1408,511 @@ Return JSON only: {"questions":[{"level":"A1","q":"...","options":["...","...","
 }
 $("open-test").onclick = ()=>show("test");
 
+/* ---------- built-in themed word packs (B1, architect) ---------- */
+// [english, magyar, example]
+const WORD_PACKS = [
+ {id:"general", hu:"Általános beszélgetés", ai:"useful everyday conversation phrases (small talk, opinions, agreeing, asking for clarification)", w:[
+  ["How's it going?","Hogy vagy? / Mi újság?","Hi Mark, how's it going?"],
+  ["to catch up","beszélgetni, behozni a lemaradást (egymás híreiben)","Let's have coffee and catch up next week."],
+  ["by the way","apropó, egyébként","By the way, did you see the new museum?"],
+  ["I see what you mean.","Értem, mire gondolsz.","I see what you mean, but I'm not sure it works."],
+  ["Could you say that again?","Megismételnéd?","Sorry, could you say that again more slowly?"],
+  ["What do you mean by…?","Mit értesz azon, hogy…?","What do you mean by 'flexible space'?"],
+  ["in my opinion","véleményem szerint","In my opinion, the old building is more beautiful."],
+  ["I agree with you.","Egyetértek veled.","I agree with you, the location is perfect."],
+  ["I'm not so sure.","Nem vagyok benne biztos.","I'm not so sure that's a good idea."],
+  ["It depends.","Attól függ.","It depends on the budget."],
+  ["to be busy with something","el van foglalva valamivel","I'm busy with a competition project this month."],
+  ["to look forward to","alig várni, előre örülni","I'm looking forward to the weekend."],
+  ["to get used to","hozzászokni","I'm getting used to speaking English at work."],
+  ["actually","valójában, igazából","Actually, I live in Budapest, not in Győr."],
+  ["anyway","mindenesetre, na mindegy","Anyway, let's get back to the plan."],
+  ["to be honest","őszintén szólva","To be honest, I prefer modern buildings."],
+  ["Let me think.","Hadd gondolkodjak.","Let me think… I'd say about three weeks."],
+  ["How do you say … in English?","Hogy mondják angolul, hogy…?","How do you say 'kivitelező' in English?"],
+  ["It's on the tip of my tongue.","A nyelvem hegyén van.","The word is on the tip of my tongue!"],
+  ["to make sense","érthető, logikus","Does that make sense to you?"],
+  ["no worries","semmi gond","No worries, we can meet tomorrow instead."],
+  ["That sounds great.","Ez nagyszerűen hangzik.","A site visit on Friday? That sounds great."],
+  ["to keep in touch","tartani a kapcsolatot","Let's keep in touch after the project."],
+  ["What do you do?","Mivel foglalkozol?","So, what do you do? – I'm an architect."],
+  ["in the meantime","közben, addig is","In the meantime, I'll send you the drawings."],
+  ["to be into something","szeretni, érdeklődni valami iránt","I'm really into sustainable design."],
+  ["for example / for instance","például","For instance, we could use more glass."],
+  ["Have a nice weekend!","Szép hétvégét!","Thanks for today. Have a nice weekend!"],
+ ]},
+ {id:"travel", hu:"Utazás", ai:"travel English (airport, hotel, transport, directions, restaurants, problems on a trip)", w:[
+  ["boarding pass","beszállókártya","Can I see your passport and boarding pass?"],
+  ["to check in","bejelentkezni (szállás, repülő)","We can check in at the hotel after 2 pm."],
+  ["to check out","kijelentkezni","What time do we need to check out?"],
+  ["hand luggage / carry-on","kézipoggyász","Only one piece of hand luggage is allowed."],
+  ["checked baggage","feladott poggyász","My checked baggage didn't arrive."],
+  ["delayed","késik (járat)","Our flight is delayed by two hours."],
+  ["gate","beszállókapu","The flight to London leaves from gate 24."],
+  ["return ticket / round trip","retúrjegy","A return ticket to Vienna, please."],
+  ["one-way ticket","csak oda szóló jegy","I only need a one-way ticket."],
+  ["to book","lefoglalni","I booked a room for three nights."],
+  ["reservation","foglalás","I have a reservation under the name Kovács."],
+  ["available","szabad, elérhető","Do you have any rooms available tonight?"],
+  ["Is breakfast included?","A reggeli benne van az árban?","How much is the room? Is breakfast included?"],
+  ["to get to","eljutni valahová","How do I get to the city centre?"],
+  ["straight on","egyenesen előre","Go straight on and turn left at the lights."],
+  ["to turn left / right","balra / jobbra fordulni","Turn right after the bridge."],
+  ["platform","vágány, peron","The train leaves from platform 3."],
+  ["to miss (a train)","lekésni (a vonatot)","Hurry up, or we'll miss the train!"],
+  ["to rent a car","autót bérelni","We want to rent a car for the weekend."],
+  ["sightseeing","városnézés","We spent the afternoon sightseeing."],
+  ["landmark","nevezetesség, jellegzetes épület","The cathedral is the city's main landmark."],
+  ["The bill, please. / Can we have the check?","Kérjük a számlát.","Excuse me, can we have the bill, please?"],
+  ["to recommend","ajánlani","Can you recommend a good local restaurant?"],
+  ["currency exchange","pénzváltó","Is there a currency exchange at the airport?"],
+  ["jet lag","időeltolódás okozta fáradtság","I still have jet lag after the flight."],
+  ["to cancel","lemondani, törölni","They cancelled our flight because of the storm."],
+  ["lost property","talált tárgyak (osztálya)","I left my bag on the train. Where is lost property?"],
+  ["travel insurance","utasbiztosítás","Don't forget to buy travel insurance."],
+ ]},
+ {id:"interview", hu:"Állásinterjú", ai:"job interview English (experience, skills, strengths, salary, questions to the employer)", w:[
+  ["to apply for a job","jelentkezni egy állásra","I'm applying for a job at a company in Vienna."],
+  ["CV / résumé","önéletrajz","I've attached my CV and portfolio."],
+  ["portfolio","portfólió (munkák válogatása)","Let me show you some of my work in my portfolio."],
+  ["work experience","szakmai tapasztalat","I have ten years of work experience in this field."],
+  ["to be responsible for","felelős valamiért","I was responsible for organising events."],
+  ["to lead a team","csapatot vezetni","I led a team of four people."],
+  ["strength","erősség","One of my strengths is solving problems on site."],
+  ["weakness","gyengeség","My weakness is that I sometimes take on too much work."],
+  ["to meet a deadline","határidőt tartani","We always met the deadline, even on tight schedules."],
+  ["to work under pressure","nyomás alatt dolgozni","I can work well under pressure."],
+  ["skills","készségek","My skills include planning and talking with clients."],
+  ["to be fluent in","folyékonyan beszél (nyelvet)","I'm fluent in Hungarian and German."],
+  ["qualification","végzettség, képesítés","I have a qualification in electro-cosmetics."],
+  ["career break","szakmai szünet (pl. gyes miatt)","I took a career break to look after my baby."],
+  ["to be a team player","jó csapatjátékos","I'm a team player and I like working with engineers."],
+  ["achievement","eredmény, siker","My biggest achievement was winning a design competition."],
+  ["to improve","fejleszteni, javítani","I want to improve my English."],
+  ["career goal","karriercél","My career goal is to open my own business."],
+  ["salary expectations","fizetési igény","What are your salary expectations?"],
+  ["benefits","juttatások","What benefits does the company offer?"],
+  ["full-time / part-time","teljes / részmunkaidős","Is this a full-time position?"],
+  ["notice period","felmondási idő","My notice period is one month."],
+  ["to be available","rendelkezésre áll, el tud kezdeni","I'm available to start in March."],
+  ["reference","ajánlás, referencia","My former boss can give you a reference."],
+  ["Why do you want to work here?","Miért szeretne nálunk dolgozni?","I want to work here because I like your company's values."],
+  ["Could you tell me more about…?","Mesélne bővebben arról, hogy…?","Could you tell me more about the team?"],
+  ["the next steps","a következő lépések","What are the next steps in the process?"],
+  ["Thank you for your time.","Köszönöm, hogy időt szánt rám.","Thank you for your time. I hope to hear from you soon."],
+ ]},
+ {id:"shop", hu:"Vásárlás", ai:"shopping English (sizes, prices, payment, returns, groceries, DIY and hardware store)", w:[
+  ["How much is it?","Mennyibe kerül?","How much is this jacket?"],
+  ["Can I try it on?","Felpróbálhatom?","I like this shirt. Can I try it on?"],
+  ["fitting room / changing room","próbafülke","Where is the fitting room?"],
+  ["size","méret","Do you have this in a larger size?"],
+  ["It fits. / It doesn't fit.","Jó rám. / Nem jó rám.","These shoes don't fit, they're too small."],
+  ["It suits you.","Jól áll neked.","That colour really suits you."],
+  ["on sale","akciós, leárazott","These chairs are on sale this week."],
+  ["discount","kedvezmény","Is there a discount if I buy two?"],
+  ["receipt","blokk, nyugta","Can I have a receipt, please?"],
+  ["to pay by card / in cash","kártyával / készpénzzel fizetni","Can I pay by card?"],
+  ["contactless","érintéses (fizetés)","You can pay contactless here."],
+  ["to return something","visszavinni valamit","I'd like to return this lamp, it's broken."],
+  ["refund","visszatérítés, pénz vissza","Can I get a refund or only an exchange?"],
+  ["to exchange","becserélni","Can I exchange it for a different colour?"],
+  ["out of stock","kifogyott, nincs raktáron","Sorry, this model is out of stock."],
+  ["to order","megrendelni","We can order it for you. It takes a week."],
+  ["delivery","szállítás, kiszállítás","Is delivery free?"],
+  ["checkout / till","pénztár","Please pay at the checkout."],
+  ["queue","sor (sorban állás)","There's a long queue at the till."],
+  ["trolley / basket","bevásárlókocsi / kosár","I need a trolley, not a basket."],
+  ["shopping bag","bevásárlótáska, szatyor","Do you need a shopping bag?"],
+  ["Just looking, thanks.","Csak nézelődöm, köszönöm.","Can I help you? – I'm just looking, thanks."],
+  ["guarantee / warranty","garancia, jótállás","The drill has a two-year warranty."],
+  ["hardware store / DIY store","barkácsáruház, vasbolt","I need screws and paint from the hardware store."],
+  ["a pair of","egy pár","I bought a pair of work boots."],
+  ["expensive / cheap","drága / olcsó","It's too expensive. Do you have anything cheaper?"],
+  ["value for money","ár-érték arány","This sofa is good value for money."],
+ ]},
+ {id:"nego", hu:"Tárgyalás", ai:"negotiation and meeting phrases (proposals, objections, compromise, closing a deal, fees, deadlines)", w:[
+  ["to negotiate","tárgyalni, alkudni","We need to negotiate the fee before we sign."],
+  ["proposal","javaslat, ajánlat","Let me explain our proposal."],
+  ["offer","ajánlat","Thank you for your offer. We need some time to consider it."],
+  ["to make a counter-offer","ellenajánlatot tenni","We'd like to make a counter-offer."],
+  ["compromise","kompromisszum","I think we can find a compromise."],
+  ["to meet halfway","félúton találkozni (engedni egymásnak)","Let's meet halfway: 8% instead of 10%."],
+  ["deadline","határidő","The deadline for the permit drawings is 15 May."],
+  ["budget","költségvetés, keret","The client's budget is limited."],
+  ["fee","díj (pl. tervezési díj)","Our design fee is 6% of the construction cost."],
+  ["terms and conditions","feltételek","Please read the terms and conditions carefully."],
+  ["to be flexible on","rugalmas valamiben","We can be flexible on the schedule, but not on the price."],
+  ["That's not acceptable for us.","Ez számunkra nem elfogadható.","A 30% discount is not acceptable for us."],
+  ["I'm afraid…","Attól tartok… (udvarias elutasítás)","I'm afraid we can't accept that date."],
+  ["What if we…?","Mi lenne, ha…?","What if we split the cost of the extra survey?"],
+  ["in return","cserébe","We can start earlier. In return, we need an advance payment."],
+  ["to take into account","figyelembe venni","Please take into account the extra work."],
+  ["advance payment","előleg","We usually ask for a 20% advance payment."],
+  ["to agree on","megállapodni valamiben","Can we agree on the main points today?"],
+  ["agreement","megállapodás","I think we have an agreement."],
+  ["to sign a contract","szerződést aláírni","We're ready to sign the contract next week."],
+  ["to point out","rámutatni, kiemelni","I'd like to point out that the price includes site supervision."],
+  ["to clarify","tisztázni","Could you clarify what is included in the price?"],
+  ["Let's move on to…","Térjünk át…","Let's move on to the payment schedule."],
+  ["to summarise","összefoglalni","To summarise, we agree on the fee and the deadline."],
+  ["bottom line","a lényeg, a végső határ","The bottom line is that we can't go below this price."],
+  ["win-win","mindkét félnek előnyös","This is a win-win solution for both sides."],
+  ["to follow up","utánamenni, folytatni (később)","I'll follow up with an email tomorrow."],
+  ["to put something in writing","írásba foglalni","Can you put that in writing, please?"],
+ ]},
+ {id:"beauty", tag:"beauty", hu:"Kozmetika, elektrokozmetika", ai:"cosmetics and electro-cosmetic treatments in a beauty salon (skin types, consultation, devices, aftercare, booking)", w:[
+  ["beautician / beauty therapist","kozmetikus","I've been a beauty therapist for twelve years."],
+  ["beauty salon","szépségszalon, kozmetika","I work in a small beauty salon in the city centre."],
+  ["treatment","kezelés","This treatment takes about one hour."],
+  ["facial","arckezelés","Would you like a deep cleansing facial?"],
+  ["skin type","bőrtípus","First, let's check your skin type."],
+  ["dry / oily / combination skin","száraz / zsíros / kombinált bőr","You have combination skin: oily on the forehead, dry on the cheeks."],
+  ["sensitive skin","érzékeny bőr","This cream is good for sensitive skin."],
+  ["pores","pórusok","The treatment helps to clean the pores."],
+  ["wrinkles / fine lines","ráncok / finom ráncok","Microcurrent can reduce fine lines."],
+  ["pigmentation / dark spots","pigmentfoltok","Sun damage can cause dark spots."],
+  ["acne / breakouts","akne / pattanások","She has breakouts on her chin."],
+  ["to cleanse","tisztítani (bőrt)","First I cleanse your skin with a gentle gel."],
+  ["to exfoliate / peeling","hámlasztani / peeling","We exfoliate the skin once a week."],
+  ["mask","pakolás, maszk","I'll put on a moisturising mask for fifteen minutes."],
+  ["moisturiser","hidratáló krém","Use a moisturiser every morning."],
+  ["serum","szérum","This serum contains hyaluronic acid."],
+  ["sunscreen / SPF","fényvédő","Please use SPF 50 after the treatment."],
+  ["device","készülék, gép","This device uses radiofrequency to tighten the skin."],
+  ["radiofrequency (RF)","rádiófrekvenciás (kezelés)","Radiofrequency warms the deeper layers of the skin."],
+  ["microcurrent","mikroáram","Microcurrent lifts and tones the face."],
+  ["ultrasound","ultrahang","The ultrasound helps the serum go deeper."],
+  ["electrode","elektróda","I'll move the electrode slowly over your cheek."],
+  ["to tighten / to lift","feszesíteni / liftingelni","The aim is to tighten the skin around the eyes."],
+  ["Does it hurt?","Fáj?","Does it hurt? – No, you'll only feel a little warmth."],
+  ["tingling","bizsergés","You may feel a slight tingling."],
+  ["redness","bőrpír","A little redness is normal after the treatment."],
+  ["aftercare","utókezelés, otthoni ápolás","Here are some aftercare tips for the next two days."],
+  ["a course of treatments","kezeléssorozat","I recommend a course of six treatments."],
+  ["to book an appointment","időpontot foglalni","Would you like to book your next appointment now?"],
+  ["contraindication","ellenjavallat","Pregnancy is a contraindication for this treatment."],
+ ]},
+ {id:"org", tag:"org", hu:"Szervezés, rendezvények", ai:"organising events and small projects (planning, budget, suppliers, volunteers, schedules, emails and reminders)", w:[
+  ["to organise","megszervezni","I'm organising a charity ball for the kindergarten."],
+  ["event","rendezvény, esemény","The event starts at 4 pm on Saturday."],
+  ["venue","helyszín (rendezvényé)","We need a bigger venue for a hundred people."],
+  ["to plan ahead","előre tervezni","We should plan ahead and book the hall in March."],
+  ["to-do list","teendőlista","I wrote a to-do list for the volunteers."],
+  ["deadline","határidő","The deadline for registration is Friday."],
+  ["budget","költségvetés, keret","Our budget is about 200,000 forints."],
+  ["to raise money / fundraising","pénzt gyűjteni / adománygyűjtés","We're raising money for new playground toys."],
+  ["donation","adomány","Thank you for your generous donation."],
+  ["sponsor","támogató, szponzor","A local bakery is our sponsor this year."],
+  ["supplier","beszállító","I called three suppliers for prices."],
+  ["quote","árajánlat","Could you send me a quote for the catering?"],
+  ["catering","étkeztetés, catering","The catering includes sandwiches and drinks."],
+  ["volunteer","önkéntes","We need five volunteers for the cake stall."],
+  ["to be in charge of","felelős valamiért","Anna is in charge of the decorations."],
+  ["to delegate","feladatot kiosztani, delegálni","I can't do everything alone, I need to delegate."],
+  ["schedule / timetable","időbeosztás, program","Here is the schedule for the day."],
+  ["to set up","felállítani, berendezni","We set up the tables at 2 o'clock."],
+  ["to clear up / to tidy up","összepakolni, rendet rakni","Who can stay and help us clear up?"],
+  ["invitation","meghívó","I'll send the invitations next week."],
+  ["to confirm","visszaigazolni, megerősíteni","Please confirm by Wednesday if you can come."],
+  ["reminder","emlékeztető","Just a quick reminder about tomorrow's meeting."],
+  ["to postpone","elhalasztani","We had to postpone the event because of the rain."],
+  ["to cancel","lemondani","The clown cancelled at the last minute."],
+  ["backup plan / plan B","tartalék terv","If it rains, our backup plan is the gym."],
+  ["to keep track of","nyomon követni","I use a spreadsheet to keep track of payments."],
+  ["It went really well.","Nagyon jól sikerült.","Thank you all, the festival went really well!"],
+  ["feedback","visszajelzés","We asked the parents for feedback."],
+ ]},
+ {id:"baby", tag:"family", hu:"Babázás, gyerekek", ai:"life with a baby and small children (feeding, sleep, health, health visitor, playground, everyday family talk)", w:[
+  ["maternity leave","szülési szabadság, gyes","I'm on maternity leave at the moment."],
+  ["newborn","újszülött","Our newborn sleeps a lot during the day."],
+  ["toddler","kisgyerek (1–3 éves)","My toddler loves the playground."],
+  ["to breastfeed","szoptatni","I breastfed her for eight months."],
+  ["bottle / formula","cumisüveg / tápszer","He drinks formula from a bottle."],
+  ["baby food / puree","bébiétel / pépes étel","She started eating carrot puree."],
+  ["nappy (UK) / diaper (US)","pelenka","Can you change his nappy, please?"],
+  ["dummy (UK) / pacifier (US)","cumi","He can't sleep without his dummy."],
+  ["pram / pushchair (UK), stroller (US)","babakocsi / sportbabakocsi","We went for a walk with the pram."],
+  ["cot (UK) / crib (US)","kiságy","The cot is next to our bed."],
+  ["nap","délutáni / nappali alvás","She has a nap after lunch."],
+  ["to fall asleep","elaludni","It takes him an hour to fall asleep."],
+  ["to wake up at night","éjjel felébredni","She still wakes up twice at night."],
+  ["teething","fogzás","He's teething, so he's a bit grumpy."],
+  ["to crawl","mászni","She started to crawl last week."],
+  ["first steps","első lépések","He took his first steps yesterday!"],
+  ["health visitor","védőnő","The health visitor comes every month."],
+  ["paediatrician","gyermekorvos","We have an appointment with the paediatrician."],
+  ["check-up","rutinvizsgálat, státuszvizsgálat","It's just a routine check-up."],
+  ["vaccination","oltás","Next week she gets her vaccination."],
+  ["temperature / fever","láz","He has a temperature of 38.5."],
+  ["a runny nose","folyik az orra","She has a runny nose and a cough."],
+  ["to look after","vigyázni valakire","My mother looks after the kids on Fridays."],
+  ["babysitter","bébiszitter","We need a babysitter for Saturday night."],
+  ["playground","játszótér","Let's meet at the playground at ten."],
+  ["to be exhausted","kimerültnek lenni","I'm exhausted, the baby was awake all night."],
+  ["It's a phase.","Ez csak egy időszak.","Don't worry, it's just a phase."],
+  ["How old is she?","Hány éves / hónapos?","How old is she? – She's ten months old."],
+ ]},
+ {id:"kinder", tag:"family", hu:"Óvoda, szülői közösség (SZMK)", ai:"kindergarten life and the parents' association (parents' meetings, teachers, events, collecting money, messages to parents)", w:[
+  ["kindergarten / nursery school","óvoda","Our son goes to kindergarten near our house."],
+  ["kindergarten teacher","óvónő, óvodapedagógus","The kindergarten teacher is very kind."],
+  ["group / class","csoport","He's in the Ladybird group."],
+  ["parents' association","szülői munkaközösség (SZMK)","I'm the chair of the parents' association."],
+  ["chair / president","elnök","As chair, I lead the parents' meetings."],
+  ["parents' meeting","szülői értekezlet","The parents' meeting is on Tuesday at 5 pm."],
+  ["agenda","napirend","The first point on the agenda is the Christmas party."],
+  ["to vote","szavazni","Let's vote on the date."],
+  ["to collect money","pénzt gyűjteni","We collect money for the teachers' gift."],
+  ["contribution","hozzájárulás, befizetés","The contribution is 2,000 forints per child."],
+  ["class fund","csoportpénz, közös kassza","We pay for the trip from the class fund."],
+  ["to drop off / to pick up","beadni (reggel) / elhozni (délután)","I drop him off at eight and pick him up at four."],
+  ["settling-in period","beszoktatás","The settling-in period takes two weeks."],
+  ["to miss someone","hiányzik valaki","She misses me in the morning, but then she's fine."],
+  ["to get on well with","jól kijönni valakivel","He gets on well with the other children."],
+  ["to share","megosztani, osztozni","They are learning to share toys."],
+  ["arts and crafts","kézműves foglalkozás","Today they did arts and crafts with leaves."],
+  ["school trip / outing","kirándulás","The outing to the zoo is next Friday."],
+  ["consent form","beleegyező nyilatkozat","Please sign the consent form for the trip."],
+  ["Christmas party / Santa's visit","karácsonyi ünnepség / Mikulás-ünnepség","The Santa's visit is on 6 December."],
+  ["fair / fun day","vásár / családi nap","We're organising a spring fun day."],
+  ["to sign up","jelentkezni, feliratkozni","Please sign up if you can bake a cake."],
+  ["group chat","csoportos chat (pl. szülői Messenger-csoport)","I'll post the details in the group chat."],
+  ["announcement","bejelentés, közlemény","Here's a short announcement from the teachers."],
+  ["Thank you all for your help.","Köszönöm mindenkinek a segítséget.","Thank you all for your help with the fair!"],
+  ["head teacher / headmistress","óvodavezető","I'll talk to the head teacher about it."],
+  ["to raise an issue","felvetni egy problémát","One parent raised an issue about the playground."],
+  ["any other business","egyebek (napirendi pont)","Is there any other business? Then let's finish."],
+ ]},
+ {id:"culture", hu:"Kultúrák, szokások", ai:"talking about cultures, customs and traditions (festivals, food, manners, differences between countries, travel experiences)", w:[
+  ["culture","kultúra","I love learning about other cultures."],
+  ["custom","szokás (közösségi)","It's a local custom to bring flowers."],
+  ["tradition","hagyomány","In Hungary, it's a tradition to eat lentils on New Year's Day."],
+  ["habit","szokás (egyéni)","Drinking tea at five is an old English habit."],
+  ["festival","fesztivál, ünnep","Busójárás is a famous festival in Mohács."],
+  ["to celebrate","ünnepelni","How do you celebrate Christmas in your country?"],
+  ["local","helyi","We always try the local food."],
+  ["dish","étel, fogás","What's the most typical dish here?"],
+  ["It's considered polite / rude to…","Udvariasnak / udvariatlannak számít, ha…","In Japan, it's considered rude to tip."],
+  ["to shake hands","kezet fogni","In Hungary, men usually shake hands."],
+  ["to greet","üdvözölni","How do people greet each other here?"],
+  ["to take off your shoes","levenni a cipőt","Do I need to take off my shoes inside?"],
+  ["to tip","borravalót adni","How much do people usually tip in restaurants?"],
+  ["the way of life","életmód, életforma","I love the relaxed way of life in Italy."],
+  ["religion","vallás","Religion is very important in their daily life."],
+  ["to be used to","hozzászokva lenni","We're not used to eating dinner so late."],
+  ["culture shock","kultúrsokk","I had a small culture shock in India."],
+  ["different from","különbözik valamitől","Breakfast there is very different from ours."],
+  ["similar to","hasonló valamihez","Their language is similar to Finnish? No, not really!"],
+  ["to try something new","kipróbálni valami újat","On holiday I always try something new."],
+  ["souvenir","ajándéktárgy, szuvenír","I bought a handmade souvenir at the market."],
+  ["market / bazaar","piac / bazár","The night market is full of food stalls."],
+  ["to bargain / to haggle","alkudni","At the bazaar you can haggle over the price."],
+  ["national holiday","nemzeti ünnep","15 March is a national holiday in Hungary."],
+  ["folk music / folk costume","népzene / népviselet","They wore beautiful folk costumes."],
+  ["What is it like to live there?","Milyen ott élni?","What is it like to live in Spain?"],
+  ["Have you ever been to…?","Voltál már …-ban/ben?","Have you ever been to Morocco?"],
+  ["It's worth seeing.","Érdemes megnézni.","The old town is really worth seeing."],
+ ]},
+ {id:"arch", tag:"arch", hu:"Építészet", ai:"general architecture vocabulary (styles, spaces, urban design, professions, project types)", w:[
+  ["building","épület","It's a five-storey residential building."],
+  ["storey / floor","emelet, szint","The house has two storeys and a basement."],
+  ["ground floor (UK) / first floor (US)","földszint","The shop is on the ground floor."],
+  ["residential","lakó- (épület, terület)","It's a residential area with family houses."],
+  ["commercial","kereskedelmi","The ground floor will be commercial space."],
+  ["mixed-use","vegyes funkciójú","We designed a mixed-use building: offices and flats."],
+  ["refurbishment / renovation","felújítás","The refurbishment of the school starts in June."],
+  ["extension","bővítés, hozzáépítés","The client wants a rear extension for a new kitchen."],
+  ["listed building / heritage building","műemlék épület","Changes to a listed building need special permission."],
+  ["façade","homlokzat","The façade is made of brick and glass."],
+  ["layout","alaprajzi elrendezés","The layout of the flat is very practical."],
+  ["open-plan","nyitott terű, egybenyitott","The kitchen and living room are open-plan."],
+  ["natural light / daylight","természetes fény","Large windows bring in a lot of natural light."],
+  ["courtyard","belső udvar","The flats are organised around a green courtyard."],
+  ["staircase","lépcsőház, lépcső","The main staircase is in the middle of the building."],
+  ["lift (UK) / elevator (US)","lift","Every flat can be reached by lift."],
+  ["landscape architect","tájépítész","We work closely with a landscape architect."],
+  ["urban planning","városrendezés, várostervezés","Urban planning decides how high we can build."],
+  ["plot / site","telek","The plot is narrow and long."],
+  ["neighbourhood","környék, városrész","The new building must fit into the neighbourhood."],
+  ["sustainable","fenntartható","We want a sustainable building with low energy use."],
+  ["energy-efficient","energiahatékony","Triple glazing makes the house more energy-efficient."],
+  ["contemporary","kortárs, modern","It's a contemporary design in a historic street."],
+  ["proportion","arány","The proportions of the windows are very elegant."],
+  ["landmark building","jellegzetes, meghatározó épület","The client wants a landmark building."],
+  ["public building","középület","Public buildings must be fully accessible."],
+  ["interior designer","belsőépítész","The interior designer chose the materials."],
+  ["client","megbízó, ügyfél","The client wants to move in by Christmas."],
+  ["contractor","kivitelező","The contractor starts on site next Monday."],
+  ["structural engineer","statikus (tartószerkezeti) mérnök","The structural engineer checked the beams."],
+ ]},
+ {id:"struct", tag:"arch", hu:"Épületszerkezetek", ai:"building structures and construction materials (foundations, walls, slabs, roofs, insulation, waterproofing, MEP basics)", w:[
+  ["foundation","alap, alapozás","The foundations are 1.2 metres deep."],
+  ["strip foundation","sávalap","The house sits on a strip foundation."],
+  ["load-bearing wall","teherhordó fal","You can't remove this wall. It's load-bearing."],
+  ["partition wall","válaszfal","We'll use plasterboard partition walls."],
+  ["reinforced concrete","vasbeton","The slab is made of reinforced concrete."],
+  ["slab / floor slab","födém, födémlemez","The floor slab is 20 centimetres thick."],
+  ["beam","gerenda","A steel beam carries the load over the opening."],
+  ["column","pillér, oszlop","The columns are on a 6-metre grid."],
+  ["lintel","áthidaló","Every window opening needs a lintel."],
+  ["masonry / brickwork","falazat","The external walls are brick masonry."],
+  ["timber frame","faváz, favázas szerkezet","It's a timber frame house."],
+  ["steel structure","acélszerkezet","The hall has a light steel structure."],
+  ["roof truss","tetőszerkezet (fedélszék, rácsos tartó)","The roof trusses are made of timber."],
+  ["pitched roof","magastető, ferde tető","The planning rules require a pitched roof."],
+  ["flat roof","lapostető","We designed a green flat roof."],
+  ["roof tiles","tetőcserép","The roof tiles are red clay."],
+  ["gutter / downpipe","ereszcsatorna / lefolyócső","The gutter is blocked with leaves."],
+  ["thermal insulation","hőszigetelés","We need 20 cm of thermal insulation on the walls."],
+  ["waterproofing / damp-proofing","vízszigetelés","The basement needs better waterproofing."],
+  ["vapour barrier","párazáró réteg","Install the vapour barrier on the warm side."],
+  ["thermal bridge","hőhíd","The balcony connection creates a thermal bridge."],
+  ["screed","esztrich, aljzatbeton","The screed must dry before the parquet is laid."],
+  ["plaster / render","vakolat (belső / külső)","The external render is cracked."],
+  ["cladding","burkolat (homlokzati)","The façade has timber cladding."],
+  ["window frame / glazing","ablakkeret / üvegezés","We chose triple glazing with wooden frames."],
+  ["expansion joint","dilatációs hézag","There's an expansion joint between the two buildings."],
+  ["load","teher, terhelés","The slab can carry a load of 5 kN per square metre."],
+  ["crack","repedés","There's a crack in the wall above the door."],
+  ["HVAC (heating, ventilation, air conditioning)","épületgépészet (fűtés, szellőzés, klíma)","The HVAC engineer needs space for the ducts."],
+  ["underfloor heating","padlófűtés","All rooms have underfloor heating."],
+ ]},
+ {id:"design", tag:"arch", hu:"Építész tervezés", ai:"architectural design process and drawings (briefs, design stages, drawings, permits, revisions, presentations)", w:[
+  ["design brief","tervezési program, megbízói igények","Let's go through the design brief together."],
+  ["concept design","koncepcióterv","We'll present the concept design next week."],
+  ["sketch","vázlat","I made a quick sketch of the entrance."],
+  ["floor plan","alaprajz","Here is the floor plan of the ground floor."],
+  ["section","metszet","The section shows the height of the rooms."],
+  ["elevation","homlokzati rajz, nézet","This is the south elevation."],
+  ["site plan","helyszínrajz","The site plan shows the access road."],
+  ["detail drawing","részletrajz","We still need a detail drawing for the roof edge."],
+  ["scale","lépték, méretarány","The plan is at a scale of 1:100."],
+  ["dimensions","méretek","Please check the dimensions on site."],
+  ["revision","módosítás, tervváltozat (rev.)","This is revision C of the drawing."],
+  ["to amend / to revise","módosítani, átdolgozni","We'll amend the layout after the meeting."],
+  ["mark-up","jelölések, kézi javítások a terven","I've sent you my mark-ups as a PDF."],
+  ["render / visualisation","látványterv","The client loved the renders."],
+  ["3D model / BIM model","3D-modell / BIM-modell","All disciplines work in one BIM model."],
+  ["building permit / planning permission","építési engedély","We submitted the planning permission application."],
+  ["building regulations / codes","építési előírások, szabványok","The design must meet the building regulations."],
+  ["zoning plan","szabályozási terv, övezeti terv","The zoning plan allows 12 metres maximum height."],
+  ["fire escape / means of escape","menekülési útvonal","Each floor needs two means of escape."],
+  ["accessible","akadálymentes","The entrance must be accessible for wheelchairs."],
+  ["floor area","alapterület","The total floor area is 450 square metres."],
+  ["ceiling height","belmagasság","The ceiling height is 2.7 metres."],
+  ["orientation","tájolás","The living room has a south-west orientation."],
+  ["specification","műszaki leírás","The specification lists all materials."],
+  ["bill of quantities","tételes költségvetés (mennyiségkiírás)","The contractor priced the bill of quantities."],
+  ["tender documents","ajánlatkérési / tender dokumentáció","The tender documents go out on Monday."],
+  ["design team meeting","tervezői koordinációs megbeszélés","We have a design team meeting every Tuesday."],
+  ["to coordinate","egyeztetni, koordinálni","We need to coordinate the ducts with the beams."],
+  ["clash","ütközés (pl. szerkezet és gépészet között)","The model shows a clash between the pipe and the beam."],
+  ["to sign off","jóváhagyni","The client signed off the concept design."],
+ ]},
+];
+const PACK_BY_ID = Object.fromEntries(WORD_PACKS.map(p=>[p.id,p]));
+// packs and scenarios with a tag only show up for profiles whose job matches (an empty job shows everything)
+const JOB_TAGS = {arch:/épít|archit|tervez|mérnök|engineer/i, beauty:/kozmet|szépség|beauty|cosmet|fodrász|masszőr/i, org:/szervez|organi|rendezv|szmk|event|asszisztens|titkár/i, family:/bab|gyes|gyed|gyerek|óvod|szmk|szül|anya|apa|mum|mom|parent/i};
+function tagOk(t){ const j = (S.settings.job||"").trim(); return !t || !j || (JOB_TAGS[t] && JOB_TAGS[t].test(j)); }
+const myPacks = () => WORD_PACKS.filter(p=>tagOk(p.tag));
+
 /* ---------- word packs ---------- */
+const READ_TYPES = [
+  ["arch","a client's email to their architect about changes they want in the design","Ügyfél e-mailje (építész)"],
+  ["arch","an excerpt from an architectural technical specification (materials, finishes, building elements)","Műszaki leírás"],
+  ["arch","a weekly construction site progress report from the site manager","Építési jelentés"],
+  ["arch","an excerpt from an architect's services agreement (scope, fees, payment stages, liability)","Szerződésrészlet"],
+  ["arch","a short article from an architecture magazine about a recent building or a sustainable design trend","Építészeti szakcikk"],
+  ["arch","minutes of a design coordination meeting between the architect and engineers","Egyeztetés jegyzőkönyve"],
+  ["beauty","a beauty salon's leaflet explaining an electro-cosmetic treatment (radiofrequency, microcurrent or ultrasound): how it works, benefits, contraindications and aftercare","Kezelés leírása (szalon szórólap)"],
+  ["beauty","a client's email or message to her beauty therapist about her skin problem and booking a treatment","Vendég üzenete a kozmetikusnak"],
+  ["beauty","a short article from a beauty magazine about skincare, a new cosmetic device or a skincare trend","Kozmetikai szakcikk"],
+  ["beauty","product information from the back of a skincare product: ingredients, how to use it, warnings","Termékleírás, összetevők"],
+  ["org","an email to parents or volunteers about organising an event: date, tasks, what to bring, how to sign up","Szervezési e-mail"],
+  ["org","an offer from a venue or caterer for a family event, with prices and what is included","Árajánlat rendezvényre"],
+  ["family","a newsletter from a kindergarten to parents about the coming month: events, trips, reminders","Óvodai hírlevél"],
+  ["family","minutes of a kindergarten parents' association meeting: decisions, money, next event","Szülői munkaközösség jegyzőkönyve"],
+  ["family","a short article from a parenting magazine about babies' sleep, food or development","Babás-mamás cikk"],
+  ["","a travel blog post about a trip abroad, with local customs, food and tips","Utazós blog, kultúrák"],
+  ["","a hotel, restaurant or tour description and some guest reviews","Szálloda, program, vélemények"],
+  ["","a job advertisement with requirements, tasks and benefits","Álláshirdetés"],
+  ["","a short everyday text such as a news story or a blog post","Hétköznapi szöveg"],
+];
+function renderReadTypes(){
+  const sel = $("read-type"); const cur = S.settings.readType || sel.value;
+  const list = READ_TYPES.filter(t=>tagOk(t[0]));
+  sel.innerHTML = list.map(t=>`<option value="${esc(t[1])}">${esc(t[2])}</option>`).join("");
+  if(list.some(t=>t[1]===cur)) sel.value = cur;
+}
+$("read-type").onchange = e => { S.settings.readType = e.target.value; save(); };
+function initPacks(){
+  renderReadTypes();
+  const sel = $("pack-topic");
+  sel.innerHTML = `<optgroup label="Kész szócsomagok">${myPacks().map(p=>`<option value="pack:${p.id}">${esc(p.hu)} (${p.w.length} szó)</option>`).join("")}</optgroup><optgroup label="További témák (AI készíti)">${$("ai-topics").innerHTML}</optgroup>`;
+  if(S.settings.packSel) sel.value = S.settings.packSel;
+  if(!sel.value) sel.value = "pack:general";
+  sel.onchange = () => { S.settings.packSel = sel.value; save(); renderPackInfo(); };
+  const vf = $("vfilter");
+  vf.innerHTML = `<option value="">Minden szavam</option>${myPacks().map(p=>`<option value="${p.id}">Csak: ${esc(p.hu)}</option>`).join("")}`;
+  vf.value = S.settings.vfilter || "";
+  vf.onchange = () => {
+    S.settings.vfilter = vf.value; flashIdx = null; flashShown = false;
+    const p = PACK_BY_ID[vf.value];
+    if(p){
+      // choosing a topic to practise also selects it above, and if none of its words are added yet, adds the first 10 right away
+      $("pack-topic").value = "pack:"+p.id; S.settings.packSel = "pack:"+p.id;
+      if(!S.vocab.some(v=>v.pack===p.id)){
+        // words that are already in the list (e.g. from a conversation) also get this topic
+        p.w.forEach(w=>{ const v = S.vocab.find(x=>x.en.toLowerCase()===w[0].toLowerCase()); if(v && !v.pack) v.pack = p.id; });
+        addWords(p.w.filter(w=>!haveWord(w[0])).slice(0,10).map(w=>({en:w[0], hu:w[1], example:w[2]})), p.id); markDay();
+      }
+    }
+    save(); renderVocab();
+  };
+}
+initPacks();
+const haveWord = en => S.vocab.some(v=>v.en.toLowerCase()===en.trim().toLowerCase());
+function renderPackInfo(){
+  try{ $("vfilter").value = S.settings.vfilter || ""; if(S.settings.packSel && $("pack-topic").value!==S.settings.packSel) $("pack-topic").value = S.settings.packSel; }catch(_){}
+  const val = $("pack-topic").value || ""; const peek = $("pack-peek");
+  if(!val.startsWith("pack:")){ $("pack-info").textContent = "Ehhez a témához az AI készít 10 új szót."; peek.hidden = true; return; }
+  const p = PACK_BY_ID[val.slice(5)]; if(!p) return;
+  const got = p.w.filter(w=>haveWord(w[0])).length;
+  $("pack-info").textContent = got >= p.w.length ? `Mind a ${p.w.length} szó a szavaid között van. A gomb most az AI-val kér 10 újat ebből a témából.` : `${p.w.length} szó a csomagban, ebből ${got} már a szavaid között. A gomb a következő 10-et adja hozzá.`;
+  peek.hidden = false;
+  $("pack-list").innerHTML = p.w.map(w=>`<li><span class="w">${esc(w[0])}</span><span class="m">${esc(w[1])}</span><span class="lvl">${haveWord(w[0]) ? "✓" : ""}</span><button class="del" data-say="${esc(w[0])}" aria-label="Kiejtés">🔊</button></li>`).join("");
+}
+$("pack-list").addEventListener("click", e => { const b = e.target.closest("[data-say]"); if(b) say(b.dataset.say); });
 $("pack-gen").onclick = async e => {
-  const btn = e.currentTarget; let sample = null; try{ sample = await getSample(); }catch(_){}
-  if(!sample){ btn.textContent = "Az AI nem érhető el"; setTimeout(()=>btn.textContent="10 új szó", 2500); return; }
-  const [kind, topic] = $("pack-topic").value.split(/:(.+)/);
-  const lv = S.settings.level; const have = S.vocab.map(v=>v.en).slice(-80).join(" | ");
+  const btn = e.currentTarget; const val = $("pack-topic").value;
+  const reset = () => setTimeout(()=>{ btn.textContent="+10 szó"; renderPackInfo(); }, 2500);
+  let packId = null, kind, topic;
+  if(val.startsWith("pack:")){
+    const p = PACK_BY_ID[val.slice(5)]; packId = p.id;
+    const next = p.w.filter(w=>!haveWord(w[0])).slice(0,10);
+    if(next.length){
+      const before = S.vocab.length;
+      addWords(next.map(w=>({en:w[0], hu:w[1], example:w[2]})), p.id); markDay(); save();
+      flashIdx = null; renderVocab();
+      btn.textContent = `+${S.vocab.length-before} szó ✓`; reset(); return;
+    }
+    kind = /^(arch|struct|design)$/.test(p.id) ? "arch" : "gen"; topic = p.ai;
+  } else [kind, topic] = val.split(/:(.+)/);
+  let sample = null; try{ sample = await getSample(); }catch(_){}
+  if(!sample){ btn.textContent = "Az AI nem érhető el"; reset(); return; }
+  const lv = S.settings.level; const have = S.vocab.map(v=>v.en).slice(-120).join(" | ");
   btn.disabled = true; btn.textContent = "Készül…";
   try{
-    const r = await sample.json(`Give 10 ${kind==="arch" ? "professional English terms an architect uses, on this topic: "+topic : "items from this list: "+topic} for a Hungarian learner at ${lv} level (still include the real professional terms, explain them simply).
+    const r = await sample.json(`Give 10 ${kind==="arch" ? "professional English terms an architect uses, on this topic: "+topic : kind==="idiom" ? "items from this list: "+topic : "useful English words and phrases on this topic: "+topic} for a Hungarian learner at ${lv} level${jobEn() ? " (job: "+jobEn()+")" : ""} (still include the real professional terms, explain them simply).
 Do not repeat any of these: ${have || "-"}.
-For each: the English term, its Hungarian equivalent${kind==="idiom" ? " (meaning, or the matching Hungarian saying)" : " (the term Hungarian architects use)"}, and one short natural example sentence ${kind==="arch" ? "from an architect's work" : ""}.
+For each: the English term, its Hungarian equivalent${kind==="idiom" ? " (meaning, or the matching Hungarian saying)" : kind==="arch" ? " (the term Hungarian architects use)" : ""}, and one short natural example sentence${kind==="arch" ? " from an architect's work" : ""}.
 Return JSON only: {"items":[{"en":"...","hu":"...","example":"..."}]}`, {modelTier:"default"});
     const items = (r && Array.isArray(r.items) ? r.items : []).filter(x=>x&&x.en&&x.hu).map(x=>({en:String(x.en), hu:String(x.hu), example:String(x.example||"")}));
     if(!items.length) throw new Error("empty");
-    const before = S.vocab.length; addWords(items); markDay(); save();
+    const before = S.vocab.length; addWords(items, packId); markDay(); save();
     flashIdx = null; renderVocab();
     btn.textContent = `+${S.vocab.length-before} szó ✓`;
   }catch(err){ btn.textContent = "Nem sikerült"; }
-  finally{ btn.disabled = false; setTimeout(()=>btn.textContent="10 új szó", 2500); }
+  finally{ btn.disabled = false; reset(); }
 };
 
 /* ---------- reading ---------- */
@@ -1309,8 +1945,8 @@ $("read-gen").onclick = async e=>{
   if(!sample){ btn.textContent = "Előbb add meg az API-kulcsot a Beállításokban"; return; }
   const lv = S.settings.level; btn.disabled = true; btn.textContent = "Szöveg készül…";
   try{
-    const res = await sample.json(`Write a reading-comprehension exercise for a Hungarian architect learning English at ${lv} level (${LEVEL_DESC[lv]}).
-Text type: ${$("read-type").value}. Length: ${lv==="A1"?"60-90":lv==="A2"?"90-130":lv==="B1"?"130-180":"180-250"} words, realistic and specific (names, numbers, materials). Use paragraphs separated by \\n.
+    const res = await sample.json(`Write a reading-comprehension exercise for a Hungarian learner of English at ${lv} level (${LEVEL_DESC[lv]})${jobEn() ? " whose job and interests are: "+jobEn() : ""}.
+Text type: ${$("read-type").value}. Length: ${lv==="A1"?"60-90":lv==="A2"?"90-130":lv==="B1"?"130-180":"180-250"} words, realistic and specific (names, numbers, details). Use paragraphs separated by \\n.
 Then 4 multiple-choice questions in English testing understanding of the text (4 options each), and a glossary of 6-8 useful words or phrases from the text with Hungarian meanings.
 Return JSON only: {"title":"...","text":"...","questions":[{"q":"...","options":["...","...","...","..."],"answer":<index 0-3>,"explain_hu":"<one sentence in Hungarian: where in the text the answer is>"}],"glossary":[{"en":"...","hu":"..."}]}`, {modelTier:"default"});
     if(!res || !res.text || !Array.isArray(res.questions)) throw new Error("bad");
@@ -1339,6 +1975,7 @@ function renderCarSrc(){
   $("car-src").innerHTML = opts.join("");
   $("car-src").value = S.settings.carSrc && (S.settings.carSrc==="vocab" || sets[S.settings.carSrc]) ? S.settings.carSrc : "vocab";
   $("car-pause").value = String(S.settings.carPause || 5);
+  $("car-listen").checked = carListenOn();
   const sc = SCENARIOS.find(s=>s.id===S.settings.scenario)||SCENARIOS[0];
   $("car-gen").textContent = `Új kifejezések: ${sc.hu}`;
 }
@@ -1349,7 +1986,7 @@ function renderCar(){
   $("car-play").setAttribute("aria-label", car.playing ? "Szünet" : "Lejátszás");
   const n = $("car-now");
   if(!items.length){
-    n.innerHTML = `<div class="en" style="font-size:1.3rem">Még nincs mit hallgatni</div><div class="muted">Beszélgess Emmával, hogy legyenek szavaid, vagy kérj új kifejezéseket a fenti gombbal.</div>`;
+    n.innerHTML = `<div class="en" style="font-size:1.3rem">Még nincs mit hallgatni</div><div class="muted">Beszélgess Mirával, hogy legyenek szavaid, vagy kérj új kifejezéseket a fenti gombbal.</div>`;
     return;
   }
   if(car.idx>=items.length) car.idx=0;
@@ -1359,6 +1996,8 @@ function renderCar(){
     <div class="hu">${esc(it.hu)}</div>
     <div class="en">${showEn ? esc(it.en) : "…"}</div>
     ${car.stage==="ex" && it.example ? `<div class="muted"><i>${esc(it.example)}</i></div>` : ""}
+    ${car.heard && (car.stage==="en" || car.stage==="ex") ? `<div class="muted">Ezt hallottam: „${esc(car.heard)}”${car.score!=null ? ` · ${car.score}%` : ""}</div>` : ""}
+    ${car.stage==="think" && car.rec ? `<div class="muted">🎙 Hallgatlak…</div>` : ""}
     <div class="count">${car.idx+1} / ${items.length}</div>`;
 }
 function pickVoice(lang){
@@ -1393,6 +2032,44 @@ function speakP(text, lang, rate){
   });
 }
 const wait = ms => new Promise(r=>setTimeout(r, ms));
+function carListenOn(){ return S.settings.carListen !== false && !!oaiKey() && !!(navigator.mediaDevices && window.MediaRecorder); }
+$("car-listen").onchange = e => { S.settings.carListen = e.target.checked; save(); if(e.target.checked && !oaiKey()){ e.target.checked = false; alert("Ehhez add meg az OpenAI-kulcsot a Beállításokban."); } };
+// Records one short answer during the thinking pause: stops 1.2 s after you finish, or when the pause is over.
+async function carRecord(maxMs, alive){
+  let stream; try{ stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}}); }catch(e){ return null; }
+  const type = ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].find(t=>{ try{ return MediaRecorder.isTypeSupported(t); }catch(_){ return false; } }) || "";
+  const r = type ? new MediaRecorder(stream, {mimeType:type}) : new MediaRecorder(stream);
+  const recType = r.mimeType || type || "audio/webm"; const chunks = [];
+  r.ondataavailable = ev => { if(ev.data && ev.data.size) chunks.push(ev.data); };
+  let spoke = false, lastLoud = Date.now(), ctx = null; const t0 = Date.now();
+  const done = new Promise(res => { r.onstop = res; });
+  try{
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const iv = setInterval(()=>{
+      if(r.state==="inactive"){ clearInterval(iv); return; }
+      an.getFloatTimeDomainData(buf); let sum=0; for(const v of buf) sum += v*v;
+      if(Math.sqrt(sum/buf.length) > 0.02){ spoke = true; lastLoud = Date.now(); }
+      const now = Date.now();
+      // once you have started, give you a little extra time beyond the pause to finish the sentence
+      if(!alive() || (spoke && now-lastLoud > 1200) || (!spoke && now-t0 > maxMs) || now-t0 > maxMs + 4000){ clearInterval(iv); try{ r.stop(); }catch(_){} }
+    }, 80);
+  }catch(e){ setTimeout(()=>{ try{ r.stop(); }catch(_){} }, maxMs); }
+  r.start(250); car.rec = true; renderCar();
+  await done; car.rec = false;
+  try{ stream.getTracks().forEach(t=>t.stop()); }catch(_){} try{ ctx && ctx.close(); }catch(_){}
+  if(!spoke || !chunks.length || !alive()) return null;
+  return {blob:new Blob(chunks, {type:recType}), type:recType};
+}
+const normWords = t => String(t).toLowerCase().replace(/[’']/g,"'").replace(/[^a-z0-9' ]+/g," ").split(/\s+/).filter(Boolean);
+function carScore(said, target){
+  const a = normWords(said), b = normWords(target.split("/")[0]); if(!b.length) return 0;
+  // longest common subsequence of words, so order matters but small slips cost little
+  const dp = Array(a.length+1).fill(0).map(()=>Array(b.length+1).fill(0));
+  for(let i=1;i<=a.length;i++) for(let j=1;j<=b.length;j++) dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  return Math.round(100 * 2*dp[a.length][b.length] / (a.length + b.length));
+}
 async function carLoop(){
   const my = ++car.token;
   const alive = () => car.playing && car.token===my;
@@ -1402,7 +2079,19 @@ async function carLoop(){
     const it = items[car.idx];
     const step = async (stage, fn) => { if(!alive()) return false; car.stage=stage; renderCar(); await fn(); return alive(); };
     if(!await step("hu", ()=>speakP(it.hu, "hu-HU", 1))) return;
-    if(!await step("think", ()=>wait((S.settings.carPause||5)*1000))) return;
+    car.heard = ""; car.score = null;
+    let fb = "";
+    if(!await step("think", async()=>{
+      const ms = (S.settings.carPause||5)*1000;
+      if(!carListenOn()){ await wait(ms); return; }
+      const clip = await carRecord(ms, alive);
+      if(!clip || !alive()) return;
+      const r = await oaiTranscribe(clip.blob, clip.type).catch(()=>null);
+      if(!r || !r.ok || !r.text) return;
+      car.heard = r.text; car.score = carScore(r.text, it.en);
+      fb = car.score >= 85 ? "Great!" : car.score >= 55 ? "Almost. Listen:" : "Not quite. Listen:";
+    })) return;
+    if(fb && !await step("en", ()=>speakP(fb, S.settings.accent, S.settings.rate))) return;
     if(!await step("en", async()=>{ await speakP(it.en, S.settings.accent, S.settings.rate); await wait(1200); await speakP(it.en, S.settings.accent, S.settings.rate); })) return;
     if(it.example){ if(!await step("ex", async()=>{ await wait(600); await speakP(it.example, S.settings.accent, S.settings.rate); })) return; }
     await wait(1500);
@@ -1462,7 +2151,43 @@ Return JSON only: {"items":[{"en":"<English phrase>","hu":"<natural Hungarian tr
   }finally{ btn.disabled = false; }
 };
 
-function renderAll(){ renderScen(); renderChat(); renderSettings(); renderStreak(); if(!$("v-vocab").hidden) renderVocab(); if(!$("v-car").hidden) renderCar(); }
+function renderProfiles(){
+  $("prof-chip").textContent = "👤 " + profName();
+  const l = profiles();
+  $("prof-list").innerHTML = l.map(p=>`<button data-prof="${esc(p.id)}" aria-pressed="${p.id===profId}">${esc(p.name)}</button>`).join("");
+  $("prof-del").hidden = profId==="main"; $("job").value = S.settings.job || "";
+}
+function switchProfile(id){
+  if(id===profId) return;
+  try{ if(hf.on) stopHandsFree(false); if(car.playing) stopCar(); if(recOn){ if(mrec) stopRecording(); else stopListening(); } stopSpeaking(); }catch(e){}
+  lsSet(S); clearTimeout(saveTimer);
+  profId = id; try{ localStorage.setItem("bsz-profile", id); }catch(e){}
+  S = merge(lsGet()); flashIdx = null; flashShown = false; car.idx = 0; test = null;
+  $("input").value = ""; renderAll(); try{ renderPackInfo(); renderCarSrc(); }catch(e){}
+}
+$("prof-chip").onclick = () => show("set");
+$("prof-list").onclick = e => { const b = e.target.closest("[data-prof]"); if(b){ switchProfile(b.dataset.prof); show(chatOf().length ? "chat" : "set"); } };
+$("prof-add").onclick = () => {
+  const name = (prompt("Az új profil neve (pl. a feleséged neve):")||"").trim().slice(0,24); if(!name) return;
+  const l = profiles(); const id = "p"+Date.now().toString(36); l.push({id, name}); setProfiles(l);
+  switchProfile(id); show("set");
+  setTimeout(()=>{ try{ $("job").focus(); }catch(e){} }, 200);
+};
+$("prof-rename").onclick = () => {
+  const l = profiles(); const p = l.find(p=>p.id===profId); if(!p) return;
+  const name = (prompt("A profil új neve:", p.name)||"").trim().slice(0,24); if(!name) return;
+  p.name = name; setProfiles(l); renderProfiles();
+};
+let profDelArmed = false;
+$("prof-del").onclick = e => {
+  if(profId==="main") return;
+  if(!profDelArmed){ profDelArmed = true; e.target.textContent = "Biztosan? Minden szava törlődik. Koppints újra"; setTimeout(()=>{ profDelArmed=false; e.target.textContent="Törlés"; }, 3500); return; }
+  profDelArmed = false; e.target.textContent = "Törlés";
+  const id = profId; setProfiles(profiles().filter(p=>p.id!==id));
+  switchProfile("main"); try{ localStorage.removeItem(stateKey(id)); }catch(_){}
+};
+$("job").onchange = e => { S.settings.job = e.target.value.trim().slice(0,80); save(); initPacks(); renderScen(); };
+function renderAll(){ renderProfiles(); initPacks(); renderScen(); renderChat(); renderSettings(); renderStreak(); if(!$("v-vocab").hidden) renderVocab(); if(!$("v-car").hidden) renderCar(); }
 initStore();
 if("serviceWorker" in navigator){ window.addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); }); }
 if(!getKey()) setTimeout(()=>{ if(!chatOf().length) show("set"); }, 300);
